@@ -36,7 +36,7 @@ function GalleryPage() {
             <p className="font-mono text-xs uppercase tracking-[0.3em] text-neon-cyan mb-2">Your gallery</p>
             <h1 className="font-display font-bold text-4xl">Saved artworks</h1>
           </div>
-          <Link to="/studio" className="px-4 py-2 rounded-md bg-primary text-primary-foreground font-mono text-xs uppercase tracking-wider glow-violet flex items-center gap-2">
+          <Link to="/edit/$artworkId" params={{ artworkId: "new" }} className="px-4 py-2 rounded-md bg-primary text-primary-foreground font-mono text-xs uppercase tracking-wider glow-violet flex items-center gap-2">
             <Palette className="w-4 h-4" /> New artwork
           </Link>
         </div>
@@ -47,7 +47,7 @@ function GalleryPage() {
           <div className="glass rounded-2xl p-12 text-center">
             <p className="text-lg font-display mb-2">No artworks yet</p>
             <p className="text-sm text-muted-foreground mb-6">Start something in the studio and save it here.</p>
-            <Link to="/studio" className="px-4 py-2 rounded-md bg-primary text-primary-foreground font-mono text-xs uppercase tracking-wider glow-violet inline-flex items-center gap-2">
+            <Link to="/edit/$artworkId" params={{ artworkId: "new" }} className="px-4 py-2 rounded-md bg-primary text-primary-foreground font-mono text-xs uppercase tracking-wider glow-violet inline-flex items-center gap-2">
               <Palette className="w-4 h-4" /> Open studio
             </Link>
           </div>
@@ -56,7 +56,7 @@ function GalleryPage() {
             {data.map((a) => (
               <div key={a.id} className="group glass rounded-2xl overflow-hidden hover:glow-violet transition-shadow">
                 <button
-                  onClick={() => router.navigate({ to: "/studio/$artworkId", params: { artworkId: a.id } })}
+                  onClick={() => router.navigate({ to: "/edit/$artworkId", params: { artworkId: a.id } })}
                   className="block w-full aspect-[3/2] bg-background overflow-hidden"
                 >
                   {a.thumbUrl ? (

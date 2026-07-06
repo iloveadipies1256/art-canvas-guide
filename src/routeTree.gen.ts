@@ -14,6 +14,8 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedGalleryRouteImport } from './routes/_authenticated/gallery'
+import { Route as AuthenticatedCoachRouteImport } from './routes/_authenticated/coach'
+import { Route as AuthenticatedEditArtworkIdRouteImport } from './routes/_authenticated/edit.$artworkId'
 
 const StudioRoute = StudioRouteImport.update({
   id: '/studio',
@@ -39,18 +41,33 @@ const AuthenticatedGalleryRoute = AuthenticatedGalleryRouteImport.update({
   path: '/gallery',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedCoachRoute = AuthenticatedCoachRouteImport.update({
+  id: '/coach',
+  path: '/coach',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedEditArtworkIdRoute =
+  AuthenticatedEditArtworkIdRouteImport.update({
+    id: '/edit/$artworkId',
+    path: '/edit/$artworkId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/studio': typeof StudioRoute
+  '/coach': typeof AuthenticatedCoachRoute
   '/gallery': typeof AuthenticatedGalleryRoute
+  '/edit/$artworkId': typeof AuthenticatedEditArtworkIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/studio': typeof StudioRoute
+  '/coach': typeof AuthenticatedCoachRoute
   '/gallery': typeof AuthenticatedGalleryRoute
+  '/edit/$artworkId': typeof AuthenticatedEditArtworkIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -58,20 +75,30 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/studio': typeof StudioRoute
+  '/_authenticated/coach': typeof AuthenticatedCoachRoute
   '/_authenticated/gallery': typeof AuthenticatedGalleryRoute
+  '/_authenticated/edit/$artworkId': typeof AuthenticatedEditArtworkIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/studio' | '/gallery'
+  fullPaths:
+    | '/'
+    | '/auth'
+    | '/studio'
+    | '/coach'
+    | '/gallery'
+    | '/edit/$artworkId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/studio' | '/gallery'
+  to: '/' | '/auth' | '/studio' | '/coach' | '/gallery' | '/edit/$artworkId'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
     | '/auth'
     | '/studio'
+    | '/_authenticated/coach'
     | '/_authenticated/gallery'
+    | '/_authenticated/edit/$artworkId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -118,15 +145,33 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedGalleryRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/coach': {
+      id: '/_authenticated/coach'
+      path: '/coach'
+      fullPath: '/coach'
+      preLoaderRoute: typeof AuthenticatedCoachRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/edit/$artworkId': {
+      id: '/_authenticated/edit/$artworkId'
+      path: '/edit/$artworkId'
+      fullPath: '/edit/$artworkId'
+      preLoaderRoute: typeof AuthenticatedEditArtworkIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedCoachRoute: typeof AuthenticatedCoachRoute
   AuthenticatedGalleryRoute: typeof AuthenticatedGalleryRoute
+  AuthenticatedEditArtworkIdRoute: typeof AuthenticatedEditArtworkIdRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedCoachRoute: AuthenticatedCoachRoute,
   AuthenticatedGalleryRoute: AuthenticatedGalleryRoute,
+  AuthenticatedEditArtworkIdRoute: AuthenticatedEditArtworkIdRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
