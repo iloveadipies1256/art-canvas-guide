@@ -89,6 +89,7 @@ export function Studio(props: StudioProps) {
   const [tool, setTool] = useState<Tool>({ kind: "brush", brush: "pen" });
   const [color, setColor] = useState("#F5F3FF");
   const [size, setSize] = useState(6);
+  const [canvasBg, setCanvasBg] = useState("#0B0B12");
   const [title, setTitle] = useState(props.title);
   const undoRef = useRef<Map<string, ImageData[]>>(new Map());
   const redoRef = useRef<Map<string, ImageData[]>>(new Map());
@@ -133,7 +134,7 @@ export function Studio(props: StudioProps) {
     const ctx = overlay.getContext("2d")!;
     ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
     // paper background
-    ctx.fillStyle = "#0B0B12";
+    ctx.fillStyle = canvasBg;
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
     for (const l of layers) {
       if (!l.visible) continue;
@@ -141,7 +142,7 @@ export function Studio(props: StudioProps) {
       ctx.drawImage(l.canvas, 0, 0);
     }
     ctx.globalAlpha = 1;
-  }, [layers]);
+  }, [layers, canvasBg]);
 
   useEffect(() => {
     renderComposite();
@@ -263,7 +264,7 @@ export function Studio(props: StudioProps) {
     out.width = CANVAS_W;
     out.height = CANVAS_H;
     const ctx = out.getContext("2d")!;
-    ctx.fillStyle = "#0B0B12";
+    ctx.fillStyle = canvasBg;
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
     for (const l of layers) {
       if (!l.visible) continue;
