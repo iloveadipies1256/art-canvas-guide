@@ -437,6 +437,29 @@ export function Studio(props: StudioProps) {
               onChange={(e) => setSize(parseInt(e.target.value))}
               className="w-full accent-primary"
             />
+            <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mt-3 block">
+              Canvas
+            </label>
+            <div className="flex items-center gap-2 mt-1.5">
+              <input
+                type="color"
+                value={canvasBg}
+                onChange={(e) => setCanvasBg(e.target.value)}
+                className="w-10 h-8 rounded-md bg-transparent border border-border cursor-pointer"
+                aria-label="Canvas background color"
+              />
+              <div className="grid grid-cols-5 gap-1 flex-1">
+                {["#0B0B12", "#FFFFFF", "#F5F3FF", "#1E1B4B", "#0F172A"].map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => setCanvasBg(c)}
+                    className={`aspect-square rounded-md border ${canvasBg === c ? "border-primary" : "border-border"}`}
+                    style={{ background: c }}
+                    aria-label={`Canvas ${c}`}
+                  />
+                ))}
+              </div>
+            </div>
           </div>
 
           <div className="p-3 flex items-center justify-between border-b border-border/60">
