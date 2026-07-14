@@ -1,8 +1,8 @@
 import { useServerFn } from "@tanstack/react-start";
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
-import { critiqueArtwork, generateLesson, type CoachLesson } from "@/lib/coach.functions";
-import { Sparkles, X, MessageSquareText } from "lucide-react";
+import { critiqueArtwork, generateLesson, generateStepImage, type CoachLesson } from "@/lib/coach.functions";
+import { Sparkles, X, MessageSquareText, Image as ImageIcon, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 export function CoachDrawer({
@@ -18,16 +18,32 @@ export function CoachDrawer({
 }) {
   const gen = useServerFn(generateLesson);
   const crit = useServerFn(critiqueArtwork);
+  const stepImg = useServerFn(generateStepImage);
   const [prompt, setPrompt] = useState(subject);
   const [lesson, setLesson] = useState<CoachLesson | null>(null);
   const [done, setDone] = useState<Record<number, boolean>>({});
   const [critique, setCritique] = useState<string | null>(null);
+  const [stepImages, setStepImages] = useState<Record<number, string>>({});
+  const [loadingStep, setLoadingStep] = useState<number | null>(null);
 
   const lessonMut = useMutation({
     mutationFn: (subj: string) => gen({ data: { subject: subj, skillLevel: "beginner" } }),
-    onSuccess: (res) => { setLesson(res); setDone({}); setCritique(null); },
+    onSuccess: (res) => { setLesson(res); setDone({}); setCritique(null); setStepImages({}); },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Coach unavailable"),
   });
+
+  async function loadStepImage(n: number, instruction: string) {
+    if (stepImages[n] || loadingStep === n) return;
+    setLoadingStep(n);
+    try {
+      const res = await stepImg({ data: { subject: prompt || subject, instruction } });
+      setStepImages((m) => ({ ...m, [n]: res.imageDataUrl }));
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not generate image");
+    } finally {
+      setLoadingStep(null);
+    }
+  }
 
   const critMut = useMutation({
     mutationFn: () => crit({
@@ -97,6 +113,23 @@ export function CoachDrawer({
                         {s.instruction}
                       </p>
                       <p className="text-xs text-muted-foreground mt-1">Tip: {s.tip}</p>
+                      {stepImages[s.n] ? (
+                        <img
+                          src={stepImages[s.n]}
+                          alt={`Step ${s.n} reference`}
+                          className="mt-2 rounded-md border border-border w-full"
+                        />
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={(e) => { e.preventDefault(); loadStepImage(s.n, s.instruction); }}
+                          disabled={loadingStep === s.n}
+                          className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-wider text-neon-cyan hover:opacity-80 disabled:opacity-50"
+                        >
+                          {loadingStep === s.n ? <Loader2 className="w-3 h-3 animate-spin" /> : <ImageIcon className="w-3 h-3" />}
+                          {loadingStep === s.n ? "Drawing…" : "Show reference"}
+                        </button>
+                      )}
                     </div>
                   </label>
                 </li>

@@ -100,3 +100,40 @@ export const listRecentLessons = createServerFn({ method: "GET" })
     if (error) throw new Error(error.message);
     return data ?? [];
   });
+
+export const generateStepImage = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z
+      .object({
+        subject: z.string().min(1).max(200),
+        instruction: z.string().min(1).max(500),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data }) => {
+    const key = process.env.LOVABLE_API_KEY;
+    if (!key) throw new Error("Missing LOVABLE_API_KEY");
+    const res = await fetch("https://ai.gateway.lovable.dev/v1/images/generations", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "google/gemini-3.1-flash-image",
+        messages: [
+          {
+            role: "user",
+            content: `Simple, clean reference drawing showing this stage of drawing "${data.subject}": ${data.instruction}. Minimal line art on a plain neutral background, no text, no annotations, one clear illustration demonstrating the step.`,
+          },
+        ],
+        modalities: ["image", "text"],
+      }),
+    });
+    if (!res.ok) {
+      const msg = await res.text().catch(() => "");
+      throw new Error(`Image generation failed: ${res.status} ${msg}`);
+    }
+    const json = (await res.json()) as { data?: { b64_json?: string }[] };
+    const b64 = json.data?.[0]?.b64_json;
+    if (!b64) throw new Error("No image returned");
+    return { imageDataUrl: `data:image/png;base64,${b64}` };
+  });
