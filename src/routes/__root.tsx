@@ -88,9 +88,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "description", content: "A neon-dark drawing studio with layered brushes, shapes, and an AI coach that walks you through every stroke." },
       { name: "author", content: "Neon Canvas" },
       { property: "og:title", content: "Neon Canvas — draw with an AI coach" },
-      { property: "og:description", content: "Neon-dark drawing studio with layers, brushes, and an AI drawing coach." },
+      { property: "og:description", content: "A neon-dark drawing studio with layered brushes, shapes, and an AI coach that walks you through every stroke." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:title", content: "Neon Canvas — draw with an AI coach" },
+      { name: "twitter:description", content: "A neon-dark drawing studio with layered brushes, shapes, and an AI coach that walks you through every stroke." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/db0d6752-7dbe-46e1-8f3e-3b2b9efe9bda/id-preview-ee0a22cb--2175ba84-467b-450b-9edd-eeb2998eb959.lovable.app-1784054581990.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/db0d6752-7dbe-46e1-8f3e-3b2b9efe9bda/id-preview-ee0a22cb--2175ba84-467b-450b-9edd-eeb2998eb959.lovable.app-1784054581990.png" },
     ],
     links: [
       {
