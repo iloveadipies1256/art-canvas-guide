@@ -1,22 +1,19 @@
 import { createServerFn } from "@tanstack/react-start";
-import { generateText, Output } from "ai";
+import { generateText, NoObjectGeneratedError, Output } from "ai";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { createLovableAiGatewayProvider } from "./ai-gateway.server";
 
 const LessonSchema = z.object({
   title: z.string(),
-  materials: z.array(z.string()).max(6),
-  steps: z
-    .array(
-      z.object({
-        n: z.number(),
-        instruction: z.string(),
-        tip: z.string(),
-      }),
-    )
-    .min(3)
-    .max(8),
+  materials: z.array(z.string()),
+  steps: z.array(
+    z.object({
+      n: z.number(),
+      instruction: z.string(),
+      tip: z.string(),
+    }),
+  ),
   challenge: z.string(),
 });
 
@@ -40,13 +37,27 @@ export const generateLesson = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const provider = gateway();
-    const { output } = await generateText({
-      model: provider("google/gemini-3-flash-preview"),
-      output: Output.object({ schema: LessonSchema }),
-      system:
-        "You are a friendly, patient drawing coach. Break every subject into concrete, doable strokes. Steps must be sequential and specific about shape, direction, and pressure. Tips should feel encouraging.",
-      prompt: `Design a step-by-step drawing lesson.\nSubject: ${data.subject}\nSkill level: ${data.skillLevel}\nReturn 4-6 concrete steps and one bonus challenge.`,
-    });
+    let output: CoachLesson;
+    try {
+      const result = await generateText({
+        model: provider("google/gemini-3-flash-preview"),
+        output: Output.object({ schema: LessonSchema }),
+        system:
+          "You are a friendly, patient drawing coach. Break every subject into concrete, doable strokes. Steps must be sequential and specific about shape, direction, and pressure. Tips should feel encouraging. Keep materials to at most 6 items and steps between 3 and 8.",
+        prompt: `Design a step-by-step drawing lesson.\nSubject: ${data.subject}\nSkill level: ${data.skillLevel}\nReturn 4-6 concrete steps and one bonus challenge.`,
+      });
+      output = result.output;
+    } catch (err) {
+      if (NoObjectGeneratedError.isInstance(err) && err.text) {
+        const cleaned = err.text.replace(/```json\s*|```/g, "").trim();
+        const start = cleaned.search(/[\{\[]/);
+        const end = cleaned.lastIndexOf("}");
+        const parsed = JSON.parse(cleaned.slice(start, end + 1));
+        output = LessonSchema.parse(parsed);
+      } else {
+        throw err;
+      }
+    }
 
     const { error } = await context.supabase.from("lessons").insert({
       user_id: context.userId,
