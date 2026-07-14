@@ -3,27 +3,9 @@ import { generateText, NoObjectGeneratedError, Output } from "ai";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { createLovableAiGatewayProvider } from "./ai-gateway.server";
+import { extractJsonObject, LessonSchema, normalizeLesson, type CoachLesson } from "./coach.schema";
 
-const LessonSchema = z.object({
-  title: z.string(),
-  materials: z.array(z.string()),
-  steps: z.array(
-    z.object({
-      n: z.number(),
-      instruction: z.string(),
-      tip: z.string(),
-    }),
-  ),
-  challenge: z.string(),
-});
-
-export type CoachLesson = z.infer<typeof LessonSchema>;
-
-function gateway() {
-  const key = process.env.LOVABLE_API_KEY;
-  if (!key) throw new Error("Missing LOVABLE_API_KEY");
-  return createLovableAiGatewayProvider(key);
-}
+export type { CoachLesson } from "./coach.schema";
 
 export const generateLesson = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -36,24 +18,27 @@ export const generateLesson = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ data, context }) => {
-    const provider = gateway();
+    const key = process.env.LOVABLE_API_KEY;
+    if (!key) throw new Error("Missing LOVABLE_API_KEY");
+    const provider = createLovableAiGatewayProvider(key);
     let output: CoachLesson;
     try {
       const result = await generateText({
         model: provider("google/gemini-3-flash-preview"),
         output: Output.object({ schema: LessonSchema }),
         system:
-          "You are a friendly, patient drawing coach. Break every subject into concrete, doable strokes. Steps must be sequential and specific about shape, direction, and pressure. Tips should feel encouraging. Keep materials to at most 6 items and steps between 3 and 8.",
+          "You are a friendly, patient drawing coach. Break every subject into concrete, doable strokes. Return exactly one JSON object with this shape: { title: string, materials: string[], steps: [{ n: number, instruction: string, tip: string }], challenge: string }. Every field is mandatory. Every step must include n, instruction, and tip. Do not use alternate keys like text, hint, lesson, or tutorial. Keep materials to at most 6 items and steps between 4 and 6.",
         prompt: `Design a step-by-step drawing lesson.\nSubject: ${data.subject}\nSkill level: ${data.skillLevel}\nReturn 4-6 concrete steps and one bonus challenge.`,
       });
-      output = result.output;
+      output = normalizeLesson(result.output, data.subject, data.skillLevel);
     } catch (err) {
       if (NoObjectGeneratedError.isInstance(err) && err.text) {
-        const cleaned = err.text.replace(/```json\s*|```/g, "").trim();
-        const start = cleaned.search(/[\{\[]/);
-        const end = cleaned.lastIndexOf("}");
-        const parsed = JSON.parse(cleaned.slice(start, end + 1));
-        output = LessonSchema.parse(parsed);
+        try {
+          output = normalizeLesson(extractJsonObject(err.text), data.subject, data.skillLevel);
+        } catch (parseErr) {
+          console.error("[coach.lesson.normalize]", parseErr);
+          output = normalizeLesson(null, data.subject, data.skillLevel);
+        }
       } else {
         throw err;
       }
@@ -81,7 +66,9 @@ export const critiqueArtwork = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ data }) => {
-    const provider = gateway();
+    const key = process.env.LOVABLE_API_KEY;
+    if (!key) throw new Error("Missing LOVABLE_API_KEY");
+    const provider = createLovableAiGatewayProvider(key);
     const { text } = await generateText({
       model: provider("google/gemini-3-flash-preview"),
       system:
