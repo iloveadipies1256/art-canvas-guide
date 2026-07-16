@@ -15,21 +15,32 @@ export const Route = createFileRoute("/auth")({
   component: AuthPage,
 });
 
+function safeNext(raw: string | null): string {
+  if (!raw) return "/gallery";
+  // Only accept same-origin relative paths (starts with a single "/", not "//" or "/\").
+  if (!raw.startsWith("/") || raw.startsWith("//") || raw.startsWith("/\\")) return "/gallery";
+  return raw;
+}
+
 function AuthPage() {
   const router = useRouter();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [next, setNext] = useState<string>("/gallery");
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const target = safeNext(params.get("next"));
+    setNext(target);
     let cancelled = false;
     supabase.auth.getSession().then(({ data }) => {
-      if (!cancelled && data.session) router.navigate({ to: "/gallery" });
+      if (!cancelled && data.session) window.location.assign(target);
     });
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
       if (session && (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "USER_UPDATED")) {
-        router.navigate({ to: "/gallery" });
+        window.location.assign(target);
       }
     });
     return () => {
@@ -46,14 +57,14 @@ function AuthPage() {
         const { error } = await supabase.auth.signUp({
           email,
           password,
-          options: { emailRedirectTo: window.location.origin + "/gallery" },
+          options: { emailRedirectTo: window.location.origin + next },
         });
         if (error) throw error;
         toast.success("Check your email to confirm your account.");
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        router.navigate({ to: "/gallery" });
+        window.location.assign(next);
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Something went wrong");
@@ -63,13 +74,15 @@ function AuthPage() {
   }
 
   async function handleGoogle() {
-    const result = await lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin });
+    const result = await lovable.auth.signInWithOAuth("google", {
+      redirect_uri: window.location.origin + "/auth?next=" + encodeURIComponent(next),
+    });
     if (result.error) {
       toast.error(result.error.message ?? "Google sign-in failed");
       return;
     }
     if (result.redirected) return;
-    router.navigate({ to: "/gallery" });
+    window.location.assign(next);
   }
 
   return (
