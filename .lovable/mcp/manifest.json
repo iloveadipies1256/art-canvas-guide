@@ -1,0 +1,99 @@
+{
+  "version": 1,
+  "sdk_version": "0.22.2",
+  "path": "/mcp",
+  "auth": {
+    "type": "oauth",
+    "issuer": "https://rfmxteyikksotpngrwyk.supabase.co/auth/v1",
+    "accepted_audiences": [
+      "authenticated"
+    ]
+  },
+  "mcp": {
+    "server": {
+      "name": "neon-canvas-mcp",
+      "version": "0.1.0",
+      "title": "Neon Canvas"
+    },
+    "tools": [
+      {
+        "name": "list_artworks",
+        "title": "List my artworks",
+        "description": "List the signed-in user's saved Neon Canvas artworks, most recently updated first.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {}
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_artwork",
+        "title": "Get artwork",
+        "description": "Get one of the signed-in user's Neon Canvas artworks by id, including a temporary signed image URL.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Artwork id (UUID) as returned by list_artworks."
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "generate_lesson",
+        "title": "Generate a drawing lesson",
+        "description": "Generate a step-by-step Neon Canvas drawing lesson for a subject and skill level. Returns title, materials, numbered steps with tips, and a bonus challenge.",
+        "annotations": {
+          "readOnlyHint": true,
+          "openWorldHint": true
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "subject": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "What to draw, e.g. 'a fox curled in autumn leaves'."
+            },
+            "skillLevel": {
+              "type": "string",
+              "enum": [
+                "beginner",
+                "intermediate",
+                "advanced"
+              ],
+              "default": "beginner",
+              "description": "Learner skill level."
+            }
+          },
+          "required": [
+            "subject"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      }
+    ]
+  }
+}
