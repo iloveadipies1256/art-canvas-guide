@@ -117,6 +117,14 @@ function CoachPage() {
           </div>
         )}
 
+        {!lesson && recent && recent.length === 0 && (
+          <div className="mt-10 glass rounded-2xl p-10 text-center">
+            <Sparkles className="w-8 h-8 mx-auto mb-3 text-neon-violet" />
+            <p className="font-display text-lg mb-1">No lessons yet</p>
+            <p className="text-sm text-muted-foreground">Type a subject above or pick a suggestion to get your first step-by-step lesson.</p>
+          </div>
+        )}
+
         {recent && recent.length > 0 && (
           <div className="mt-10">
             <p className="font-mono text-xs uppercase tracking-[0.3em] text-muted-foreground mb-3">Recent lessons</p>
