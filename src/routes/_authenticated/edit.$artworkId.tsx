@@ -42,6 +42,7 @@ function EditPage() {
         title={currentTitle}
         onTitleChange={setTitle}
         initialImageUrl={data?.imageUrl}
+        artworkId={isNew ? undefined : artworkId}
         saving={saving}
         onRequestCoach={(img) => setCoachImage(img)}
         onSave={async ({ imageDataUrl, thumbDataUrl, width, height }) => {
