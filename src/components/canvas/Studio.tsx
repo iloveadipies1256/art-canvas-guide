@@ -23,13 +23,30 @@ import {
   Sparkles,
   ChevronUp,
   ChevronDown,
+  PanelLeft,
+  PanelRight,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
 } from "lucide-react";
 import type { BrushKind, Layer, ShapeKind, Tool } from "./types";
 import { applyBrushSettings, drawStrokeSegment } from "./brushes";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const CANVAS_W = 1400;
 const CANVAS_H = 900;
-const UNDO_LIMIT = 30;
+const UNDO_LIMIT = 60;
+const AUTOSAVE_MS = 30_000;
+const DRAFT_PREFIX = "neon-canvas:draft:";
 
 const BRUSHES: { kind: BrushKind; label: string; icon: React.ReactNode }[] = [
   { kind: "pen", label: "Pen", icon: <Pencil className="w-4 h-4" /> },
@@ -57,19 +74,34 @@ function makeLayer(name: string): Layer {
   const c = document.createElement("canvas");
   c.width = CANVAS_W;
   c.height = CANVAS_H;
-  return {
-    id: crypto.randomUUID(),
-    name,
-    visible: true,
-    opacity: 1,
-    canvas: c,
-  };
+  return { id: crypto.randomUUID(), name, visible: true, opacity: 1, canvas: c };
+}
+
+type HistoryEntry = { layerId: string; before: ImageData; after: ImageData };
+
+interface DraftLayer {
+  id: string;
+  name: string;
+  visible: boolean;
+  opacity: number;
+  dataUrl: string;
+}
+interface Draft {
+  title: string;
+  canvasBg: string;
+  layers: DraftLayer[];
+  updatedAt: number;
+}
+
+function draftKey(artworkId: string | undefined) {
+  return DRAFT_PREFIX + (artworkId ?? "studio");
 }
 
 export interface StudioProps {
   title: string;
   onTitleChange?: (t: string) => void;
   initialImageUrl?: string | null;
+  artworkId?: string;
   onSave?: (payload: {
     imageDataUrl: string;
     thumbDataUrl: string;
@@ -91,23 +123,43 @@ export function Studio(props: StudioProps) {
   const [size, setSize] = useState(6);
   const [canvasBg, setCanvasBg] = useState("#0B0B12");
   const [title, setTitle] = useState(props.title);
-  const undoRef = useRef<Map<string, ImageData[]>>(new Map());
-  const redoRef = useRef<Map<string, ImageData[]>>(new Map());
-  const [, setUndoTick] = useState(0);
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [lastPressure, setLastPressure] = useState(0.5);
+  const [leftOpen, setLeftOpen] = useState(false);
+  const [rightOpen, setRightOpen] = useState(false);
+  const [pendingDeleteLayerId, setPendingDeleteLayerId] = useState<string | null>(null);
+  const [dirty, setDirty] = useState(false);
+  const [draftAvailable, setDraftAvailable] = useState<Draft | null>(null);
+  const [, setTick] = useState(0);
+
+  const historyRef = useRef<{
+    undo: HistoryEntry[];
+    redo: HistoryEntry[];
+    capturing: { layerId: string; before: ImageData } | null;
+  }>({ undo: [], redo: [], capturing: null });
+
+  const pointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const gestureRef = useRef<{
+    startDist: number;
+    startZoom: number;
+    startMid: { x: number; y: number };
+    startPan: { x: number; y: number };
+  } | null>(null);
+
   const drawingRef = useRef<{
     from: { x: number; y: number } | null;
     shapeStart: { x: number; y: number } | null;
     shapeSnapshot: ImageData | null;
-  }>({ from: null, shapeStart: null, shapeSnapshot: null });
+    activePointerId: number | null;
+  }>({ from: null, shapeStart: null, shapeSnapshot: null, activePointerId: null });
 
   useEffect(() => setTitle(props.title), [props.title]);
 
-  // ensure active id
   useEffect(() => {
     if (!activeId && layers[0]) setActiveId(layers[0].id);
   }, [layers, activeId]);
 
-  // Load initial image into first layer once
   const loadedRef = useRef(false);
   useEffect(() => {
     if (loadedRef.current || !props.initialImageUrl || layers.length === 0) return;
@@ -123,6 +175,16 @@ export function Studio(props: StudioProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.initialImageUrl]);
 
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(draftKey(props.artworkId));
+      if (!raw) return;
+      const d = JSON.parse(raw) as Draft;
+      if (d && Array.isArray(d.layers) && d.layers.length) setDraftAvailable(d);
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const activeLayer = useMemo(
     () => layers.find((l) => l.id === activeId) ?? layers[0],
     [layers, activeId],
@@ -133,7 +195,6 @@ export function Studio(props: StudioProps) {
     if (!overlay) return;
     const ctx = overlay.getContext("2d")!;
     ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
-    // paper background
     ctx.fillStyle = canvasBg;
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
     for (const l of layers) {
@@ -148,60 +209,89 @@ export function Studio(props: StudioProps) {
     renderComposite();
   }, [renderComposite]);
 
-  function pushUndo(layer: Layer) {
-    const stack = undoRef.current.get(layer.id) ?? [];
+  function beginHistoryCapture(layer: Layer) {
     const ctx = layer.canvas.getContext("2d")!;
-    stack.push(ctx.getImageData(0, 0, CANVAS_W, CANVAS_H));
-    if (stack.length > UNDO_LIMIT) stack.shift();
-    undoRef.current.set(layer.id, stack);
-    redoRef.current.set(layer.id, []);
-    setUndoTick((t) => t + 1);
+    historyRef.current.capturing = {
+      layerId: layer.id,
+      before: ctx.getImageData(0, 0, CANVAS_W, CANVAS_H),
+    };
+  }
+
+  function commitHistoryCapture(layer: Layer) {
+    const cap = historyRef.current.capturing;
+    historyRef.current.capturing = null;
+    if (!cap || cap.layerId !== layer.id) return;
+    const ctx = layer.canvas.getContext("2d")!;
+    const after = ctx.getImageData(0, 0, CANVAS_W, CANVAS_H);
+    historyRef.current.undo.push({ layerId: layer.id, before: cap.before, after });
+    if (historyRef.current.undo.length > UNDO_LIMIT) historyRef.current.undo.shift();
+    historyRef.current.redo = [];
+    setTick((t) => t + 1);
+    setDirty(true);
   }
 
   function undo() {
-    if (!activeLayer) return;
-    const stack = undoRef.current.get(activeLayer.id) ?? [];
-    const prev = stack.pop();
-    if (!prev) return;
-    const ctx = activeLayer.canvas.getContext("2d")!;
-    const redo = redoRef.current.get(activeLayer.id) ?? [];
-    redo.push(ctx.getImageData(0, 0, CANVAS_W, CANVAS_H));
-    redoRef.current.set(activeLayer.id, redo);
-    ctx.putImageData(prev, 0, 0);
-    undoRef.current.set(activeLayer.id, stack);
+    const entry = historyRef.current.undo.pop();
+    if (!entry) return;
+    const layer = layers.find((l) => l.id === entry.layerId);
+    if (!layer) return;
+    layer.canvas.getContext("2d")!.putImageData(entry.before, 0, 0);
+    historyRef.current.redo.push(entry);
+    if (activeId !== entry.layerId) setActiveId(entry.layerId);
     renderComposite();
-    setUndoTick((t) => t + 1);
+    setTick((t) => t + 1);
+    setDirty(true);
   }
 
   function redo() {
-    if (!activeLayer) return;
-    const redo = redoRef.current.get(activeLayer.id) ?? [];
-    const next = redo.pop();
-    if (!next) return;
-    const ctx = activeLayer.canvas.getContext("2d")!;
-    const stack = undoRef.current.get(activeLayer.id) ?? [];
-    stack.push(ctx.getImageData(0, 0, CANVAS_W, CANVAS_H));
-    undoRef.current.set(activeLayer.id, stack);
-    ctx.putImageData(next, 0, 0);
-    redoRef.current.set(activeLayer.id, redo);
+    const entry = historyRef.current.redo.pop();
+    if (!entry) return;
+    const layer = layers.find((l) => l.id === entry.layerId);
+    if (!layer) return;
+    layer.canvas.getContext("2d")!.putImageData(entry.after, 0, 0);
+    historyRef.current.undo.push(entry);
+    if (activeId !== entry.layerId) setActiveId(entry.layerId);
     renderComposite();
-    setUndoTick((t) => t + 1);
+    setTick((t) => t + 1);
+    setDirty(true);
   }
 
-  function toCanvasPoint(e: React.PointerEvent) {
+  function toCanvasPoint(clientX: number, clientY: number) {
     const overlay = overlayRef.current!;
     const rect = overlay.getBoundingClientRect();
     return {
-      x: ((e.clientX - rect.left) / rect.width) * CANVAS_W,
-      y: ((e.clientY - rect.top) / rect.height) * CANVAS_H,
+      x: ((clientX - rect.left) / rect.width) * CANVAS_W,
+      y: ((clientY - rect.top) / rect.height) * CANVAS_H,
     };
   }
 
   function onPointerDown(e: React.PointerEvent) {
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointersRef.current.size >= 2) {
+      // Cancel any in-flight stroke and begin a pinch/pan gesture.
+      historyRef.current.capturing = null;
+      drawingRef.current.from = null;
+      drawingRef.current.shapeStart = null;
+      drawingRef.current.shapeSnapshot = null;
+      drawingRef.current.activePointerId = null;
+      const pts = Array.from(pointersRef.current.values());
+      const dx = pts[0].x - pts[1].x;
+      const dy = pts[0].y - pts[1].y;
+      const dist = Math.hypot(dx, dy) || 1;
+      gestureRef.current = {
+        startDist: dist,
+        startZoom: zoom,
+        startMid: { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 },
+        startPan: { ...pan },
+      };
+      return;
+    }
     if (!activeLayer) return;
     e.currentTarget.setPointerCapture(e.pointerId);
-    pushUndo(activeLayer);
-    const p = toCanvasPoint(e);
+    drawingRef.current.activePointerId = e.pointerId;
+    beginHistoryCapture(activeLayer);
+    const p = toCanvasPoint(e.clientX, e.clientY);
+    if (e.pressure) setLastPressure(e.pressure);
     const ctx = activeLayer.canvas.getContext("2d")!;
     if (tool.kind === "brush") {
       applyBrushSettings(ctx, tool.brush, color, size);
@@ -215,17 +305,33 @@ export function Studio(props: StudioProps) {
   }
 
   function onPointerMove(e: React.PointerEvent) {
-    if (!activeLayer) return;
-    const p = toCanvasPoint(e);
+    if (pointersRef.current.has(e.pointerId)) {
+      pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    }
+    if (pointersRef.current.size >= 2 && gestureRef.current) {
+      const pts = Array.from(pointersRef.current.values());
+      const dx = pts[0].x - pts[1].x;
+      const dy = pts[0].y - pts[1].y;
+      const dist = Math.hypot(dx, dy) || 1;
+      const mid = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+      const newZoom = Math.max(
+        0.25,
+        Math.min(6, gestureRef.current.startZoom * (dist / gestureRef.current.startDist)),
+      );
+      const dxMid = mid.x - gestureRef.current.startMid.x;
+      const dyMid = mid.y - gestureRef.current.startMid.y;
+      setZoom(newZoom);
+      setPan({ x: gestureRef.current.startPan.x + dxMid, y: gestureRef.current.startPan.y + dyMid });
+      return;
+    }
+    if (drawingRef.current.activePointerId !== e.pointerId || !activeLayer) return;
+    if (e.pressure) setLastPressure(e.pressure);
+    const p = toCanvasPoint(e.clientX, e.clientY);
     const ctx = activeLayer.canvas.getContext("2d")!;
     if (tool.kind === "brush" && drawingRef.current.from) {
       applyBrushSettings(ctx, tool.brush, color, size);
       for (const ev of e.nativeEvent.getCoalescedEvents?.() ?? [e.nativeEvent]) {
-        const rect = overlayRef.current!.getBoundingClientRect();
-        const to = {
-          x: ((ev.clientX - rect.left) / rect.width) * CANVAS_W,
-          y: ((ev.clientY - rect.top) / rect.height) * CANVAS_H,
-        };
+        const to = toCanvasPoint(ev.clientX, ev.clientY);
         drawStrokeSegment(ctx, tool.brush, color, size, drawingRef.current.from, to);
         drawingRef.current.from = to;
       }
@@ -237,13 +343,18 @@ export function Studio(props: StudioProps) {
     }
   }
 
-  function onPointerUp() {
-    drawingRef.current.from = null;
-    drawingRef.current.shapeStart = null;
-    drawingRef.current.shapeSnapshot = null;
+  function endPointer(e: React.PointerEvent) {
+    pointersRef.current.delete(e.pointerId);
+    if (pointersRef.current.size < 2) gestureRef.current = null;
+    if (drawingRef.current.activePointerId === e.pointerId) {
+      if (activeLayer) commitHistoryCapture(activeLayer);
+      drawingRef.current.from = null;
+      drawingRef.current.shapeStart = null;
+      drawingRef.current.shapeSnapshot = null;
+      drawingRef.current.activePointerId = null;
+    }
   }
 
-  // keyboard shortcuts
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
@@ -257,7 +368,82 @@ export function Studio(props: StudioProps) {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [activeLayer]);
+  }, [layers, activeId]);
+
+  function serializeDraft(): Draft {
+    return {
+      title,
+      canvasBg,
+      layers: layers.map((l) => ({
+        id: l.id,
+        name: l.name,
+        visible: l.visible,
+        opacity: l.opacity,
+        dataUrl: l.canvas.toDataURL("image/png"),
+      })),
+      updatedAt: Date.now(),
+    };
+  }
+
+  const persistDraft = useCallback(() => {
+    if (!dirty) return;
+    try {
+      localStorage.setItem(draftKey(props.artworkId), JSON.stringify(serializeDraft()));
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dirty, layers, title, canvasBg, props.artworkId]);
+
+  useEffect(() => {
+    const id = setInterval(persistDraft, AUTOSAVE_MS);
+    return () => clearInterval(id);
+  }, [persistDraft]);
+
+  useEffect(() => {
+    if (!dirty) return;
+    function beforeUnload(e: BeforeUnloadEvent) {
+      persistDraft();
+      e.preventDefault();
+      e.returnValue = "";
+    }
+    window.addEventListener("beforeunload", beforeUnload);
+    return () => window.removeEventListener("beforeunload", beforeUnload);
+  }, [dirty, persistDraft]);
+
+  function restoreDraft(d: Draft) {
+    Promise.all(
+      d.layers.map(
+        (dl) =>
+          new Promise<Layer>((resolve) => {
+            const c = document.createElement("canvas");
+            c.width = CANVAS_W;
+            c.height = CANVAS_H;
+            const img = new Image();
+            img.onload = () => {
+              c.getContext("2d")!.drawImage(img, 0, 0, CANVAS_W, CANVAS_H);
+              resolve({ id: dl.id, name: dl.name, visible: dl.visible, opacity: dl.opacity, canvas: c });
+            };
+            img.onerror = () =>
+              resolve({ id: dl.id, name: dl.name, visible: dl.visible, opacity: dl.opacity, canvas: c });
+            img.src = dl.dataUrl;
+          }),
+      ),
+    ).then((newLayers) => {
+      setLayers(newLayers);
+      setActiveId(newLayers[0].id);
+      setCanvasBg(d.canvasBg);
+      setTitle(d.title);
+      props.onTitleChange?.(d.title);
+      historyRef.current = { undo: [], redo: [], capturing: null };
+      setDraftAvailable(null);
+      setDirty(true);
+      toast.success("Draft restored");
+    });
+  }
+
+  function discardDraft() {
+    try { localStorage.removeItem(draftKey(props.artworkId)); } catch {}
+    setDraftAvailable(null);
+  }
 
   function flatten(): HTMLCanvasElement {
     const out = document.createElement("canvas");
@@ -297,22 +483,38 @@ export function Studio(props: StudioProps) {
         width: CANVAS_W,
         height: CANVAS_H,
       });
+      setDirty(false);
+      try { localStorage.removeItem(draftKey(props.artworkId)); } catch {}
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Save failed");
     }
   }
 
   function addLayer() {
-    setLayers((ls) => [...ls, makeLayer(`Layer ${ls.length + 1}`)]);
+    const l = makeLayer(`Layer ${layers.length + 1}`);
+    setLayers((ls) => [...ls, l]);
+    setActiveId(l.id);
+    setDirty(true);
   }
 
-  function removeLayer(id: string) {
+  function requestRemoveLayer(id: string) {
+    if (layers.length === 1) { toast.error("Cannot delete the only layer"); return; }
+    setPendingDeleteLayerId(id);
+  }
+
+  function confirmRemoveLayer() {
+    const id = pendingDeleteLayerId;
+    if (!id) return;
     setLayers((ls) => {
       if (ls.length === 1) return ls;
       const next = ls.filter((l) => l.id !== id);
       if (activeId === id) setActiveId(next[0].id);
       return next;
     });
+    historyRef.current.undo = historyRef.current.undo.filter((e) => e.layerId !== id);
+    historyRef.current.redo = historyRef.current.redo.filter((e) => e.layerId !== id);
+    setPendingDeleteLayerId(null);
+    setDirty(true);
   }
 
   function moveLayer(id: string, dir: -1 | 1) {
@@ -324,27 +526,44 @@ export function Studio(props: StudioProps) {
       [next[i], next[j]] = [next[j], next[i]];
       return next;
     });
+    setDirty(true);
   }
 
+  const canUndo = historyRef.current.undo.length > 0;
+  const canRedo = historyRef.current.redo.length > 0;
+
   return (
-    <div className="flex flex-col h-[calc(100vh-3.5rem)] bg-background overflow-hidden">
-      {/* Top bar */}
-      <div className="flex items-center gap-3 px-4 h-12 border-b border-border/60 glass">
+    <div className="flex flex-col h-[calc(100dvh-3.5rem)] bg-background overflow-hidden">
+      <div className="flex items-center gap-1.5 px-2 sm:px-4 h-12 border-b border-border/60 glass">
+        <button
+          onClick={() => setLeftOpen((v) => !v)}
+          className="md:hidden p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary"
+          aria-label="Toggle tools"
+        >
+          <PanelLeft className="w-4 h-4" />
+        </button>
         <input
           value={title}
-          onChange={(e) => { setTitle(e.target.value); props.onTitleChange?.(e.target.value); }}
-          className="bg-transparent text-sm font-display font-medium focus:outline-none border-b border-transparent focus:border-primary px-1 max-w-64"
+          onChange={(e) => { setTitle(e.target.value); props.onTitleChange?.(e.target.value); setDirty(true); }}
+          className="bg-transparent text-sm font-display font-medium focus:outline-none border-b border-transparent focus:border-primary px-1 w-28 sm:w-48"
           placeholder="Untitled"
         />
-        <div className="flex items-center gap-1 ml-2">
-          <IconBtn onClick={undo} title="Undo (⌘Z)"><Undo2 className="w-4 h-4" /></IconBtn>
-          <IconBtn onClick={redo} title="Redo (⌘⇧Z)"><Redo2 className="w-4 h-4" /></IconBtn>
+        <div className="flex items-center gap-1 ml-1">
+          <IconBtn onClick={undo} disabled={!canUndo} title="Undo (⌘Z)"><Undo2 className="w-4 h-4" /></IconBtn>
+          <IconBtn onClick={redo} disabled={!canRedo} title="Redo (⌘⇧Z)"><Redo2 className="w-4 h-4" /></IconBtn>
         </div>
+        <PressureDot pressure={lastPressure} />
         <div className="flex-1" />
+        <div className="hidden sm:flex items-center gap-1">
+          <IconBtn onClick={() => setZoom((z) => Math.max(0.25, z - 0.25))} title="Zoom out"><ZoomOut className="w-4 h-4" /></IconBtn>
+          <span className="text-[10px] font-mono w-10 text-center text-foreground/80">{Math.round(zoom * 100)}%</span>
+          <IconBtn onClick={() => setZoom((z) => Math.min(6, z + 0.25))} title="Zoom in"><ZoomIn className="w-4 h-4" /></IconBtn>
+          <IconBtn onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }} title="Fit"><Maximize2 className="w-4 h-4" /></IconBtn>
+        </div>
         {props.onRequestCoach && (
           <button
             onClick={() => props.onRequestCoach!(flatten().toDataURL("image/png"))}
-            className="px-3 py-1.5 rounded-md border border-accent/40 text-neon-cyan text-xs font-mono uppercase tracking-wider hover:bg-accent/10 flex items-center gap-1.5"
+            className="hidden sm:flex px-3 py-1.5 rounded-md border border-accent/40 text-neon-cyan text-xs font-mono uppercase tracking-wider hover:bg-accent/10 items-center gap-1.5"
           >
             <Sparkles className="w-3.5 h-3.5" /> Ask coach
           </button>
@@ -356,19 +575,38 @@ export function Studio(props: StudioProps) {
             disabled={props.saving}
             className="px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-xs font-mono uppercase tracking-wider glow-violet disabled:opacity-50 flex items-center gap-1.5"
           >
-            <Save className="w-3.5 h-3.5" /> {props.saveLabel ?? (props.saving ? "Saving…" : "Save")}
+            <Save className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">{props.saveLabel ?? (props.saving ? "Saving…" : "Save")}</span>
           </button>
         )}
+        <button
+          onClick={() => setRightOpen((v) => !v)}
+          className="md:hidden p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary"
+          aria-label="Toggle panels"
+        >
+          <PanelRight className="w-4 h-4" />
+        </button>
       </div>
 
-      <div className="flex flex-1 overflow-hidden">
-        {/* Left tools */}
-        <aside className="w-14 border-r border-border/60 flex flex-col items-center py-3 gap-1 glass">
+      {draftAvailable && (
+        <div className="glass border-b border-border/60 px-4 py-2 flex flex-wrap items-center gap-3">
+          <p className="text-xs">
+            Unsaved draft from {new Date(draftAvailable.updatedAt).toLocaleString()}.
+          </p>
+          <button onClick={() => restoreDraft(draftAvailable)} className="px-2.5 py-1 rounded-md bg-primary text-primary-foreground text-[11px] font-mono uppercase">Restore</button>
+          <button onClick={discardDraft} className="px-2.5 py-1 rounded-md border border-border text-[11px] font-mono uppercase text-foreground/80 hover:text-foreground">Discard</button>
+        </div>
+      )}
+
+      <div className="flex flex-1 overflow-hidden relative">
+        <aside
+          className={`${leftOpen ? "flex" : "hidden"} md:flex absolute md:relative z-30 md:z-auto inset-y-0 left-0 w-14 border-r border-border/60 flex-col items-center py-3 gap-1 glass`}
+        >
           {BRUSHES.map((b) => (
             <IconBtn
               key={b.kind}
               active={tool.kind === "brush" && tool.brush === b.kind}
-              onClick={() => setTool({ kind: "brush", brush: b.kind })}
+              onClick={() => { setTool({ kind: "brush", brush: b.kind }); setLeftOpen(false); }}
               title={b.label}
             >
               {b.icon}
@@ -379,7 +617,7 @@ export function Studio(props: StudioProps) {
             <IconBtn
               key={s.kind}
               active={tool.kind === "shape" && tool.shape === s.kind}
-              onClick={() => setTool({ kind: "shape", shape: s.kind })}
+              onClick={() => { setTool({ kind: "shape", shape: s.kind }); setLeftOpen(false); }}
               title={s.label}
             >
               {s.icon}
@@ -387,9 +625,20 @@ export function Studio(props: StudioProps) {
           ))}
         </aside>
 
-        {/* Canvas */}
-        <div ref={containerRef} className="flex-1 relative overflow-auto flex items-center justify-center p-6" style={{ background: "radial-gradient(ellipse at center, oklch(0.20 0.04 285), oklch(0.11 0.02 280))" }}>
-          <div className="relative shadow-2xl glow-violet rounded-lg overflow-hidden" style={{ aspectRatio: `${CANVAS_W}/${CANVAS_H}`, width: "min(100%, 1200px)" }}>
+        <div
+          ref={containerRef}
+          className="flex-1 relative overflow-hidden flex items-center justify-center p-2 sm:p-6"
+          style={{ background: "radial-gradient(ellipse at center, oklch(0.20 0.04 285), oklch(0.11 0.02 280))" }}
+        >
+          <div
+            className="relative shadow-2xl glow-violet rounded-lg overflow-hidden touch-none select-none"
+            style={{
+              aspectRatio: `${CANVAS_W}/${CANVAS_H}`,
+              width: "min(100%, 1200px)",
+              transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+              transformOrigin: "center center",
+            }}
+          >
             <canvas
               ref={overlayRef}
               width={CANVAS_W}
@@ -397,16 +646,17 @@ export function Studio(props: StudioProps) {
               className="block w-full h-full touch-none cursor-crosshair"
               onPointerDown={onPointerDown}
               onPointerMove={onPointerMove}
-              onPointerUp={onPointerUp}
-              onPointerCancel={onPointerUp}
+              onPointerUp={endPointer}
+              onPointerCancel={endPointer}
             />
           </div>
         </div>
 
-        {/* Right panels */}
-        <aside className="w-64 border-l border-border/60 flex flex-col glass overflow-hidden">
+        <aside
+          className={`${rightOpen ? "flex" : "hidden"} md:flex absolute md:relative z-30 md:z-auto inset-y-0 right-0 w-72 md:w-64 border-l border-border/60 flex-col glass overflow-hidden`}
+        >
           <div className="p-3 border-b border-border/60">
-            <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Color</label>
+            <label className="text-[10px] font-mono uppercase tracking-widest text-foreground/80">Color</label>
             <div className="flex items-center gap-2 mt-1.5">
               <input
                 type="color"
@@ -426,7 +676,7 @@ export function Studio(props: StudioProps) {
                 ))}
               </div>
             </div>
-            <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mt-3 block">
+            <label className="text-[10px] font-mono uppercase tracking-widest text-foreground/80 mt-3 block">
               Size <span className="text-foreground ml-1">{size}px</span>
             </label>
             <input
@@ -437,14 +687,14 @@ export function Studio(props: StudioProps) {
               onChange={(e) => setSize(parseInt(e.target.value))}
               className="w-full accent-primary"
             />
-            <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mt-3 block">
+            <label className="text-[10px] font-mono uppercase tracking-widest text-foreground/80 mt-3 block">
               Canvas
             </label>
             <div className="flex items-center gap-2 mt-1.5">
               <input
                 type="color"
                 value={canvasBg}
-                onChange={(e) => setCanvasBg(e.target.value)}
+                onChange={(e) => { setCanvasBg(e.target.value); setDirty(true); }}
                 className="w-10 h-8 rounded-md bg-transparent border border-border cursor-pointer"
                 aria-label="Canvas background color"
               />
@@ -452,7 +702,7 @@ export function Studio(props: StudioProps) {
                 {["#0B0B12", "#FFFFFF", "#F5F3FF", "#1E1B4B", "#0F172A"].map((c) => (
                   <button
                     key={c}
-                    onClick={() => setCanvasBg(c)}
+                    onClick={() => { setCanvasBg(c); setDirty(true); }}
                     className={`aspect-square rounded-md border ${canvasBg === c ? "border-primary" : "border-border"}`}
                     style={{ background: c }}
                     aria-label={`Canvas ${c}`}
@@ -463,7 +713,7 @@ export function Studio(props: StudioProps) {
           </div>
 
           <div className="p-3 flex items-center justify-between border-b border-border/60">
-            <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Layers</span>
+            <span className="text-[10px] font-mono uppercase tracking-widest text-foreground/80">Layers</span>
             <button onClick={addLayer} className="text-neon-violet hover:opacity-80" aria-label="Add layer">
               <Plus className="w-4 h-4" />
             </button>
@@ -476,8 +726,8 @@ export function Studio(props: StudioProps) {
               >
                 <div className="flex items-center gap-1">
                   <button
-                    onClick={() => setLayers((ls) => ls.map((x) => x.id === l.id ? { ...x, visible: !x.visible } : x))}
-                    className="text-muted-foreground hover:text-foreground"
+                    onClick={() => { setLayers((ls) => ls.map((x) => x.id === l.id ? { ...x, visible: !x.visible } : x)); setDirty(true); }}
+                    className="text-foreground/70 hover:text-foreground"
                     aria-label="Toggle visibility"
                   >
                     {l.visible ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
@@ -488,9 +738,9 @@ export function Studio(props: StudioProps) {
                   >
                     {l.name}
                   </button>
-                  <button onClick={() => moveLayer(l.id, 1)} className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground" aria-label="Move up"><ChevronUp className="w-3 h-3" /></button>
-                  <button onClick={() => moveLayer(l.id, -1)} className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground" aria-label="Move down"><ChevronDown className="w-3 h-3" /></button>
-                  <button onClick={() => removeLayer(l.id)} className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive" aria-label="Delete"><Trash2 className="w-3 h-3" /></button>
+                  <button onClick={() => moveLayer(l.id, 1)} className="md:opacity-0 md:group-hover:opacity-100 text-foreground/70 hover:text-foreground" aria-label="Move up"><ChevronUp className="w-3 h-3" /></button>
+                  <button onClick={() => moveLayer(l.id, -1)} className="md:opacity-0 md:group-hover:opacity-100 text-foreground/70 hover:text-foreground" aria-label="Move down"><ChevronDown className="w-3 h-3" /></button>
+                  <button onClick={() => requestRemoveLayer(l.id)} className="md:opacity-0 md:group-hover:opacity-100 text-foreground/70 hover:text-destructive" aria-label="Delete"><Trash2 className="w-3 h-3" /></button>
                 </div>
                 <input
                   type="range"
@@ -501,6 +751,7 @@ export function Studio(props: StudioProps) {
                   onChange={(e) => {
                     const v = parseFloat(e.target.value);
                     setLayers((ls) => ls.map((x) => x.id === l.id ? { ...x, opacity: v } : x));
+                    setDirty(true);
                   }}
                   className="w-full accent-primary mt-1"
                 />
@@ -509,6 +760,38 @@ export function Studio(props: StudioProps) {
           </div>
         </aside>
       </div>
+
+      <AlertDialog open={!!pendingDeleteLayerId} onOpenChange={(o) => !o && setPendingDeleteLayerId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this layer?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The layer and every stroke on it will be removed. This can't be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmRemoveLayer} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete layer</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+function PressureDot({ pressure }: { pressure: number }) {
+  const p = Math.max(0.05, Math.min(1, pressure || 0.05));
+  const d = 6 + p * 18;
+  return (
+    <div
+      className="hidden sm:flex items-center justify-center w-8 h-8 rounded-md border border-border/60 ml-1"
+      title={`Pressure ${Math.round(p * 100)}%`}
+      aria-label={`Pointer pressure ${Math.round(p * 100)} percent`}
+    >
+      <span
+        className="rounded-full bg-primary transition-all"
+        style={{ width: `${d}px`, height: `${d}px`, boxShadow: `0 0 ${p * 12}px oklch(0.63 0.24 300 / 0.7)` }}
+      />
     </div>
   );
 }
@@ -517,7 +800,7 @@ function IconBtn({ children, active, ...rest }: React.ButtonHTMLAttributes<HTMLB
   return (
     <button
       {...rest}
-      className={`p-2 rounded-md transition-colors ${active ? "bg-primary text-primary-foreground glow-violet" : "text-muted-foreground hover:text-foreground hover:bg-secondary"}`}
+      className={`p-2 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${active ? "bg-primary text-primary-foreground glow-violet" : "text-foreground/80 hover:text-foreground hover:bg-secondary"}`}
     >
       {children}
     </button>

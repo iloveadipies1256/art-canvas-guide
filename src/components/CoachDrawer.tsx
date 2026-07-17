@@ -5,6 +5,9 @@ import { critiqueArtwork, generateLesson, generateStepImage, type CoachLesson } 
 import { Sparkles, X, MessageSquareText, Image as ImageIcon, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
+const stepImageCache = new Map<string, string>();
+const cacheKey = (subject: string, instruction: string) => `${subject}|||${instruction}`;
+
 export function CoachDrawer({
   open,
   imageDataUrl,
@@ -34,9 +37,16 @@ export function CoachDrawer({
 
   async function loadStepImage(n: number, instruction: string) {
     if (stepImages[n] || loadingStep === n) return;
+    const key = cacheKey(prompt || subject, instruction);
+    const cached = stepImageCache.get(key);
+    if (cached) {
+      setStepImages((m) => ({ ...m, [n]: cached }));
+      return;
+    }
     setLoadingStep(n);
     try {
       const res = await stepImg({ data: { subject: prompt || subject, instruction } });
+      stepImageCache.set(key, res.imageDataUrl);
       setStepImages((m) => ({ ...m, [n]: res.imageDataUrl }));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not generate image");
@@ -119,15 +129,23 @@ export function CoachDrawer({
                           alt={`Step ${s.n} reference`}
                           className="mt-2 rounded-md border border-border w-full"
                         />
+                      ) : loadingStep === s.n ? (
+                        <div className="mt-2 rounded-md border border-border w-full aspect-square bg-secondary/50 overflow-hidden relative">
+                          <div className="absolute inset-0 animate-pulse bg-gradient-to-br from-primary/10 via-transparent to-accent/10" />
+                          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-[11px] font-mono uppercase tracking-wider text-neon-cyan">
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Drawing reference…
+                          </div>
+                        </div>
                       ) : (
                         <button
                           type="button"
                           onClick={(e) => { e.preventDefault(); loadStepImage(s.n, s.instruction); }}
-                          disabled={loadingStep === s.n}
+                          disabled={loadingStep !== null}
                           className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-wider text-neon-cyan hover:opacity-80 disabled:opacity-50"
                         >
-                          {loadingStep === s.n ? <Loader2 className="w-3 h-3 animate-spin" /> : <ImageIcon className="w-3 h-3" />}
-                          {loadingStep === s.n ? "Drawing…" : "Show reference"}
+                          <ImageIcon className="w-3 h-3" />
+                          Show reference
                         </button>
                       )}
                     </div>
