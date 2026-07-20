@@ -24,7 +24,7 @@ export type UserSkill = {
 };
 
 async function loadOrSeedSkill(
-  supabase: Awaited<ReturnType<typeof requireSupabaseAuth.server>> extends { context: { supabase: infer S } } ? S : any,
+  supabase: any,
   userId: string,
 ): Promise<{ score: number; sample_count: number; self_reported: boolean }> {
   const { data } = await (supabase as any)
