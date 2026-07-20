@@ -50,6 +50,30 @@ export type Database = {
         }
         Relationships: []
       }
+      course_progress: {
+        Row: {
+          completed_at: string
+          feedback: string | null
+          id: string
+          module_id: string
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string
+          feedback?: string | null
+          id?: string
+          module_id: string
+          user_id: string
+        }
+        Update: {
+          completed_at?: string
+          feedback?: string | null
+          id?: string
+          module_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       lessons: {
         Row: {
           created_at: string
@@ -98,6 +122,33 @@ export type Database = {
           display_name?: string | null
           id?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      user_skill: {
+        Row: {
+          created_at: string
+          sample_count: number
+          score: number
+          self_reported: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          sample_count?: number
+          score?: number
+          self_reported?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          sample_count?: number
+          score?: number
+          self_reported?: boolean
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
