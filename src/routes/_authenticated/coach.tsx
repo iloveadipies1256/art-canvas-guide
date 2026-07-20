@@ -3,8 +3,18 @@ import { useServerFn } from "@tanstack/react-start";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { AppShell } from "@/components/AppShell";
-import { generateLesson, listRecentLessons, type CoachLesson } from "@/lib/coach.functions";
-import { Sparkles, Palette } from "lucide-react";
+import {
+  generateLesson,
+  getUserSkill,
+  listRecentLessons,
+  setStartingSkill,
+  submitLessonFeedback,
+  type CoachLesson,
+  type UserSkill,
+} from "@/lib/coach.functions";
+import { levelBadge } from "@/lib/course";
+import type { SkillLevel } from "@/lib/coach.skill";
+import { Sparkles, Palette, GraduationCap } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/coach")({
@@ -29,24 +39,98 @@ const SUGGESTIONS = [
 function CoachPage() {
   const gen = useServerFn(generateLesson);
   const list = useServerFn(listRecentLessons);
+  const skillFn = useServerFn(getUserSkill);
+  const seedFn = useServerFn(setStartingSkill);
+  const feedbackFn = useServerFn(submitLessonFeedback);
   const qc = useQueryClient();
   const [subject, setSubject] = useState("");
-  const [skill, setSkill] = useState<"beginner" | "intermediate" | "advanced">("beginner");
-  const [lesson, setLesson] = useState<CoachLesson | null>(null);
+  const [lesson, setLesson] = useState<(CoachLesson & { level?: SkillLevel }) | null>(null);
+  const [feedbackGiven, setFeedbackGiven] = useState(false);
 
   const { data: recent } = useQuery({ queryKey: ["lessons"], queryFn: () => list() });
+  const { data: skill } = useQuery<UserSkill>({ queryKey: ["user-skill"], queryFn: () => skillFn() });
 
   const mut = useMutation({
-    mutationFn: () => gen({ data: { subject, skillLevel: skill } }),
-    onSuccess: (res) => { setLesson(res); qc.invalidateQueries({ queryKey: ["lessons"] }); },
+    mutationFn: () => gen({ data: { subject } }),
+    onSuccess: (res) => {
+      setLesson(res);
+      setFeedbackGiven(false);
+      qc.invalidateQueries({ queryKey: ["lessons"] });
+    },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Coach unavailable"),
   });
+
+  const seedMut = useMutation({
+    mutationFn: (level: SkillLevel) => seedFn({ data: { level } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["user-skill"] }),
+  });
+
+  const rateMut = useMutation({
+    mutationFn: (rating: "too_easy" | "just_right" | "too_hard") => feedbackFn({ data: { rating } }),
+    onSuccess: (res) => {
+      qc.setQueryData(["user-skill"], res);
+      setFeedbackGiven(true);
+      toast.success(`Got it — coaching at ${levelBadge(res.level)} level.`);
+    },
+  });
+
+  const needsSeed = skill && !skill.selfReported;
 
   return (
     <AppShell>
       <div className="max-w-[1100px] mx-auto px-6 py-10">
-        <p className="font-mono text-xs uppercase tracking-[0.3em] text-neon-cyan mb-2">The AI Coach</p>
-        <h1 className="font-display font-bold text-4xl mb-8">What are we drawing today?</h1>
+        <div className="flex items-center justify-between gap-4 mb-8">
+          <div>
+            <p className="font-mono text-xs uppercase tracking-[0.3em] text-neon-cyan mb-2">The AI Coach</p>
+            <h1 className="font-display font-bold text-4xl">What are we drawing today?</h1>
+          </div>
+          {skill && (
+            <div className="hidden sm:flex flex-col items-end gap-1">
+              <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Your level</span>
+              <span className="font-mono text-xs px-3 py-1 rounded-full border border-primary/40 bg-primary/10 text-neon-violet">
+                {levelBadge(skill.level)} · {Math.round(skill.score)}
+              </span>
+            </div>
+          )}
+        </div>
+
+        <div className="mb-6">
+          <Link
+            to="/course"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-accent/40 bg-accent/5 text-neon-cyan font-mono text-xs uppercase tracking-wider hover:bg-accent/10"
+          >
+            <GraduationCap className="w-4 h-4" /> Follow the Learn-to-Draw course
+          </Link>
+        </div>
+
+        {needsSeed && (
+          <div className="glass rounded-2xl p-6 mb-6 border border-primary/30 glow-violet">
+            <p className="font-mono text-xs uppercase tracking-[0.3em] text-neon-violet mb-2">First time here</p>
+            <h2 className="font-display font-bold text-xl mb-1">Where are you starting from?</h2>
+            <p className="text-sm text-muted-foreground mb-4">
+              This seeds your coach. It'll self-correct as you draw and give feedback.
+            </p>
+            <div className="grid sm:grid-cols-3 gap-2">
+              {(
+                [
+                  { level: "beginner" as const, label: "Total beginner", hint: "I rarely draw" },
+                  { level: "intermediate" as const, label: "Some practice", hint: "I've drawn a bit" },
+                  { level: "advanced" as const, label: "Experienced", hint: "I draw regularly" },
+                ]
+              ).map((opt) => (
+                <button
+                  key={opt.level}
+                  onClick={() => seedMut.mutate(opt.level)}
+                  disabled={seedMut.isPending}
+                  className="text-left p-4 rounded-lg border border-border hover:border-primary hover:bg-primary/5 transition-colors disabled:opacity-50"
+                >
+                  <p className="font-display font-medium">{opt.label}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{opt.hint}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="glass rounded-2xl p-6 glow-violet">
           <div className="flex gap-2">
@@ -57,15 +141,6 @@ function CoachPage() {
               className="flex-1 px-4 py-3 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-primary"
               onKeyDown={(e) => e.key === "Enter" && subject.trim() && mut.mutate()}
             />
-            <select
-              value={skill}
-              onChange={(e) => setSkill(e.target.value as never)}
-              className="px-3 py-3 rounded-lg bg-input border border-border font-mono text-xs uppercase"
-            >
-              <option value="beginner">Beginner</option>
-              <option value="intermediate">Intermediate</option>
-              <option value="advanced">Advanced</option>
-            </select>
             <button
               onClick={() => subject.trim() && mut.mutate()}
               disabled={mut.isPending || !subject.trim()}
@@ -74,6 +149,11 @@ function CoachPage() {
               <Sparkles className="w-4 h-4" /> {mut.isPending ? "Coaching…" : "Get lesson"}
             </button>
           </div>
+          {skill && (
+            <p className="text-[11px] font-mono text-muted-foreground mt-3">
+              Steps will be tuned for <span className="text-neon-cyan">{levelBadge(skill.level).toLowerCase()}</span> level.
+            </p>
+          )}
           <div className="mt-4 flex flex-wrap gap-2">
             {SUGGESTIONS.map((s) => (
               <button
@@ -92,7 +172,10 @@ function CoachPage() {
             <div className="flex items-start justify-between gap-4 mb-4">
               <div>
                 <h2 className="font-display font-bold text-2xl">{lesson.title}</h2>
-                <p className="text-xs text-muted-foreground font-mono mt-1">{lesson.materials.join(" · ")}</p>
+                <p className="text-xs text-muted-foreground font-mono mt-1">
+                  {lesson.level ? `${levelBadge(lesson.level)} · ` : ""}
+                  {lesson.materials.join(" · ")}
+                </p>
               </div>
               <Link
                 to="/edit/$artworkId"
@@ -113,6 +196,36 @@ function CoachPage() {
             <div className="mt-4 p-4 rounded-lg border border-accent/40 bg-accent/5">
               <p className="text-xs font-mono uppercase tracking-widest text-neon-cyan mb-1">Bonus challenge</p>
               <p>{lesson.challenge}</p>
+            </div>
+
+            <div className="mt-6 p-4 rounded-lg border border-border bg-secondary/30">
+              {feedbackGiven ? (
+                <p className="text-sm text-muted-foreground text-center">Thanks — the coach adjusted your level.</p>
+              ) : (
+                <>
+                  <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-3 text-center">
+                    How was this lesson?
+                  </p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(
+                      [
+                        { r: "too_easy" as const, label: "Too easy" },
+                        { r: "just_right" as const, label: "Just right" },
+                        { r: "too_hard" as const, label: "Too hard" },
+                      ]
+                    ).map((o) => (
+                      <button
+                        key={o.r}
+                        onClick={() => rateMut.mutate(o.r)}
+                        disabled={rateMut.isPending}
+                        className="px-3 py-2 rounded-md border border-border font-mono text-xs uppercase tracking-wider hover:border-primary hover:bg-primary/5 disabled:opacity-50"
+                      >
+                        {o.label}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           </div>
         )}
