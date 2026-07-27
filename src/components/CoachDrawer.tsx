@@ -1,12 +1,152 @@
 import { useServerFn } from "@tanstack/react-start";
 import { useMutation } from "@tanstack/react-query";
-import { useState } from "react";
-import { critiqueArtwork, generateLesson, generateStepImage, type CoachLesson } from "@/lib/coach.functions";
-import { Sparkles, X, MessageSquareText, Image as ImageIcon, Loader2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import {
+  critiqueArtwork,
+  generateLesson,
+  generateStepImage,
+  type CoachLesson,
+  type CritiqueRegion,
+  type MicroDrill,
+} from "@/lib/coach.functions";
+import { Sparkles, X, MessageSquareText, Image as ImageIcon, Loader2, Timer, Play, Pause, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 
 const stepImageCache = new Map<string, string>();
 const cacheKey = (subject: string, instruction: string) => `${subject}|||${instruction}`;
+
+const REGION_COLORS: Record<CritiqueRegion["category"], string> = {
+  proportion: "border-neon-violet",
+  lineControl: "border-neon-cyan",
+  shading: "border-amber-400",
+  other: "border-primary",
+};
+
+const REGION_LABEL_BG: Record<CritiqueRegion["category"], string> = {
+  proportion: "bg-neon-violet/90",
+  lineControl: "bg-neon-cyan/90",
+  shading: "bg-amber-400/90",
+  other: "bg-primary/90",
+};
+
+function CritiqueImageWithRegions({ src, regions }: { src: string; regions: CritiqueRegion[] }) {
+  const [activeIdx, setActiveIdx] = useState<number | null>(null);
+  return (
+    <div className="relative w-full rounded-md overflow-hidden border border-border">
+      <img src={src} alt="Your submitted drawing" className="w-full block" />
+      {regions.map((r, i) => (
+        <button
+          key={i}
+          type="button"
+          onClick={() => setActiveIdx(activeIdx === i ? null : i)}
+          className={`absolute border-2 rounded-sm transition-all ${REGION_COLORS[r.category]} ${
+            activeIdx === i ? "ring-2 ring-offset-1 ring-offset-background ring-white/60 z-10" : ""
+          }`}
+          style={{
+            left: `${r.x}%`,
+            top: `${r.y}%`,
+            width: `${r.width}%`,
+            height: `${r.height}%`,
+          }}
+          title={r.issue}
+        >
+          <span
+            className={`absolute -top-5 left-0 whitespace-nowrap text-[9px] font-mono uppercase tracking-wide text-black px-1 py-0.5 rounded-sm ${REGION_LABEL_BG[r.category]}`}
+          >
+            {i + 1}
+          </span>
+        </button>
+      ))}
+      {activeIdx !== null && regions[activeIdx] && (
+        <div className="absolute bottom-0 inset-x-0 bg-background/95 backdrop-blur-sm border-t border-border p-2">
+          <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
+            {regions[activeIdx].category}
+          </p>
+          <p className="text-xs mt-0.5">{regions[activeIdx].issue}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MicroDrillCard({ drill }: { drill: MicroDrill }) {
+  const [secondsLeft, setSecondsLeft] = useState(drill.durationSeconds);
+  const [running, setRunning] = useState(false);
+  const [finished, setFinished] = useState(false);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (!running) return;
+    intervalRef.current = setInterval(() => {
+      setSecondsLeft((s) => {
+        if (s <= 1) {
+          setRunning(false);
+          setFinished(true);
+          if (intervalRef.current) clearInterval(intervalRef.current);
+          return 0;
+        }
+        return s - 1;
+      });
+    }, 1000);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [running]);
+
+  function toggle() {
+    if (finished) return;
+    setRunning((r) => !r);
+  }
+
+  function reset() {
+    setRunning(false);
+    setFinished(false);
+    setSecondsLeft(drill.durationSeconds);
+  }
+
+  const pct = Math.round(((drill.durationSeconds - secondsLeft) / drill.durationSeconds) * 100);
+
+  return (
+    <div className="p-3 rounded-lg border border-neon-cyan/40 bg-neon-cyan/5">
+      <p className="text-xs font-mono uppercase tracking-widest text-neon-cyan mb-1 flex items-center gap-1">
+        <Timer className="w-3 h-3" /> Micro-drill
+      </p>
+      <p className="text-sm font-semibold">{drill.title}</p>
+      <p className="text-xs text-muted-foreground mt-1">{drill.instructions}</p>
+
+      <div className="mt-3 flex items-center gap-3">
+        <button
+          type="button"
+          onClick={toggle}
+          disabled={finished}
+          className="w-9 h-9 shrink-0 rounded-full border border-neon-cyan/50 flex items-center justify-center text-neon-cyan hover:bg-neon-cyan/10 disabled:opacity-40"
+        >
+          {running ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
+        </button>
+        <div className="flex-1">
+          <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
+            <div
+              className="h-full bg-neon-cyan transition-all duration-1000 ease-linear"
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+          <p className="text-[10px] font-mono mt-1 text-muted-foreground">
+            {finished ? "Nice — drill complete" : `${secondsLeft}s left`}
+          </p>
+        </div>
+        {(finished || secondsLeft !== drill.durationSeconds) && (
+          <button
+            type="button"
+            onClick={reset}
+            className="w-7 h-7 shrink-0 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export function CoachDrawer({
   open,
@@ -26,12 +166,15 @@ export function CoachDrawer({
   const [lesson, setLesson] = useState<CoachLesson | null>(null);
   const [done, setDone] = useState<Record<number, boolean>>({});
   const [critique, setCritique] = useState<string | null>(null);
+  const [critiqueRegions, setCritiqueRegions] = useState<CritiqueRegion[]>([]);
+  const [microDrill, setMicroDrill] = useState<MicroDrill | null>(null);
+  const [critiquedImage, setCritiquedImage] = useState<string | null>(null);
   const [stepImages, setStepImages] = useState<Record<number, string>>({});
   const [loadingStep, setLoadingStep] = useState<number | null>(null);
 
   const lessonMut = useMutation({
     mutationFn: (subj: string) => gen({ data: { subject: subj, skillLevel: "beginner" } }),
-    onSuccess: (res) => { setLesson(res); setDone({}); setCritique(null); setStepImages({}); },
+    onSuccess: (res) => { setLesson(res); setDone({}); setCritique(null); setCritiqueRegions([]); setMicroDrill(null); setStepImages({}); },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Coach unavailable"),
   });
 
@@ -63,7 +206,12 @@ export function CoachDrawer({
         stepInstruction: lesson?.steps.find((s) => !done[s.n])?.instruction,
       },
     }),
-    onSuccess: (res) => setCritique(res.critique),
+    onSuccess: (res) => {
+      setCritique(res.critique);
+      setCritiqueRegions(res.regions ?? []);
+      setMicroDrill(res.microDrill ?? null);
+      setCritiquedImage(imageDataUrl);
+    },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Coach unavailable"),
   });
 
@@ -166,11 +314,24 @@ export function CoachDrawer({
         )}
 
         {critique && (
-          <div className="p-3 rounded-lg border border-primary/40 bg-primary/5">
-            <p className="text-xs font-mono uppercase tracking-widest text-neon-violet mb-1 flex items-center gap-1">
-              <MessageSquareText className="w-3 h-3" /> Feedback
-            </p>
-            <p className="text-sm whitespace-pre-line">{critique}</p>
+          <div className="space-y-3">
+            <div className="p-3 rounded-lg border border-primary/40 bg-primary/5">
+              <p className="text-xs font-mono uppercase tracking-widest text-neon-violet mb-1 flex items-center gap-1">
+                <MessageSquareText className="w-3 h-3" /> Feedback
+              </p>
+              <p className="text-sm whitespace-pre-line">{critique}</p>
+            </div>
+
+            {critiquedImage && critiqueRegions.length > 0 && (
+              <div>
+                <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mb-1.5">
+                  Tap a marker for details
+                </p>
+                <CritiqueImageWithRegions src={critiquedImage} regions={critiqueRegions} />
+              </div>
+            )}
+
+            {microDrill && <MicroDrillCard drill={microDrill} key={microDrill.title} />}
           </div>
         )}
       </div>
