@@ -23,6 +23,54 @@ export type UserSkill = {
   level: SkillLevel;
 };
 
+// A single flagged region on the submitted artwork, in percentage coordinates
+// (0-100, relative to image width/height) so the client can overlay it on the
+// <img> at any render size without needing the original pixel dimensions.
+export type CritiqueRegion = {
+  x: number; // left, % of image width
+  y: number; // top, % of image height
+  width: number; // % of image width
+  height: number; // % of image height
+  category: "proportion" | "lineControl" | "shading" | "other";
+  issue: string; // short label, e.g. "Ear proportion is off"
+};
+
+export type MicroDrill = {
+  title: string;
+  instructions: string;
+  durationSeconds: number;
+};
+
+const CritiqueRegionSchema = z.object({
+  x: z.number().min(0).max(100),
+  y: z.number().min(0).max(100),
+  width: z.number().min(1).max(100),
+  height: z.number().min(1).max(100),
+  category: z.enum(["proportion", "lineControl", "shading", "other"]),
+  issue: z.string().min(1).max(120),
+});
+
+const MicroDrillSchema = z.object({
+  title: z.string().min(1).max(80),
+  instructions: z.string().min(1).max(300),
+  durationSeconds: z.number().int().min(20).max(120),
+});
+
+const CritiqueSchema = z.object({
+  critique: z.string().min(1),
+  skillEstimate: z.number().min(0).max(100),
+  level: z.enum(["beginner", "intermediate", "advanced"]),
+  lineControl: z.number().min(0).max(100).optional(),
+  proportion: z.number().min(0).max(100).optional(),
+  shading: z.number().min(0).max(100).optional(),
+  // New: 0-3 flagged regions, worst-first. Empty array is fine (a clean piece
+  // doesn't need to be flagged just to have something to show).
+  regions: z.array(CritiqueRegionSchema).max(3).optional().default([]),
+  // A single, focused drill targeting the single biggest issue found (usually
+  // regions[0], but the model chooses what's most worth 60 seconds of practice).
+  microDrill: MicroDrillSchema.optional(),
+});
+
 async function loadOrSeedSkill(
   supabase: any,
   userId: string,
@@ -161,28 +209,29 @@ export const critiqueArtwork = createServerFn({ method: "POST" })
     const key = process.env.LOVABLE_API_KEY;
     if (!key) throw new Error("Missing LOVABLE_API_KEY");
     const provider = createLovableAiGatewayProvider(key);
-    const CritiqueSchema = z.object({
-      critique: z.string().min(1),
-      skillEstimate: z.number().min(0).max(100),
-      level: z.enum(["beginner", "intermediate", "advanced"]),
-      lineControl: z.number().min(0).max(100).optional(),
-      proportion: z.number().min(0).max(100).optional(),
-      shading: z.number().min(0).max(100).optional(),
-    });
     let parsed: z.infer<typeof CritiqueSchema>;
     try {
       const result = await generateText({
         model: provider("google/gemini-3-flash-preview"),
         output: Output.object({ schema: CritiqueSchema }),
         system:
-          "You are a kind, precise drawing coach AND a skill assessor. Look at the drawing and produce JSON with: critique (2-4 sentences: one real strength, one concrete adjustment, one micro-exercise; never harsh), lineControl 0-100, proportion 0-100, shading 0-100 (rate what you visibly see; 0 = absent/very shaky, 50 = solid beginner, 75 = confident intermediate, 90+ = trained). skillEstimate is your overall 0-100 assessment weighting line control, proportion, and use of value/shading roughly equally. level is 'beginner' (<35), 'intermediate' (35-70), or 'advanced' (70+) matching skillEstimate. Do not inflate scores to be nice.",
+          "You are a kind, precise drawing coach AND a skill assessor. Look at the drawing and produce JSON with: " +
+          "critique (2-4 sentences: one real strength, one concrete adjustment, one micro-exercise; never harsh), " +
+          "lineControl 0-100, proportion 0-100, shading 0-100 (rate what you visibly see; 0 = absent/very shaky, 50 = solid beginner, 75 = confident intermediate, 90+ = trained). " +
+          "skillEstimate is your overall 0-100 assessment weighting line control, proportion, and use of value/shading roughly equally. " +
+          "level is 'beginner' (<35), 'intermediate' (35-70), or 'advanced' (70+) matching skillEstimate. Do not inflate scores to be nice. " +
+          "ALSO identify up to 3 specific regions of the image that have the clearest, most fixable issues (worst first). " +
+          "For each region give x, y, width, height as PERCENTAGES of the full image (0-100, origin top-left) tightly bounding just the problem area — not the whole drawing. " +
+          "Tag each region's category as one of proportion, lineControl, shading, or other, and give a short (under 12 word) issue label naming exactly what's off there. " +
+          "If the piece is genuinely clean, return an empty regions array rather than inventing nitpicks. " +
+          "Finally, based on the single most important issue found (usually the first region), write ONE microDrill: a title, clear instructions for a focused ~30-90 second isolated practice exercise that targets just that issue (not a full new lesson), and durationSeconds.",
         messages: [
           {
             role: "user",
             content: [
               {
                 type: "text",
-                text: `Subject: ${data.subject}${data.stepInstruction ? `\nCurrent step: ${data.stepInstruction}` : ""}\nCritique my drawing and assess my skill.`,
+                text: `Subject: ${data.subject}${data.stepInstruction ? `\nCurrent step: ${data.stepInstruction}` : ""}\nCritique my drawing, assess my skill, flag specific problem regions, and give me one micro-drill.`,
               },
               { type: "image", image: data.imageDataUrl },
             ],
@@ -191,25 +240,25 @@ export const critiqueArtwork = createServerFn({ method: "POST" })
       });
       parsed = result.output;
     } catch (err) {
-      // Fallback: plain-text critique, no skill update.
+      // Fallback: plain-text critique, no skill update, no regions.
       const { text } = await generateText({
-      model: provider("google/gemini-3-flash-preview"),
-      system:
-        "You are a kind, precise drawing coach. Give 2-4 sentences: name one strength you actually see, one concrete thing to adjust next, and one micro-exercise. Never be harsh.",
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: `Subject: ${data.subject}${data.stepInstruction ? `\nCurrent step: ${data.stepInstruction}` : ""}\nLook at my drawing and give feedback.`,
-            },
-            { type: "image", image: data.imageDataUrl },
-          ],
-        },
-      ],
-    });
-      return { critique: text, skill: null as UserSkill | null };
+        model: provider("google/gemini-3-flash-preview"),
+        system:
+          "You are a kind, precise drawing coach. Give 2-4 sentences: name one strength you actually see, one concrete thing to adjust next, and one micro-exercise. Never be harsh.",
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: `Subject: ${data.subject}${data.stepInstruction ? `\nCurrent step: ${data.stepInstruction}` : ""}\nLook at my drawing and give feedback.`,
+              },
+              { type: "image", image: data.imageDataUrl },
+            ],
+          },
+        ],
+      });
+      return { critique: text, regions: [] as CritiqueRegion[], microDrill: null as MicroDrill | null, skill: null as UserSkill | null };
     }
 
     // Roll the user's skill score toward the new estimate.
@@ -229,6 +278,8 @@ export const critiqueArtwork = createServerFn({ method: "POST" })
         shading: parsed.shading ?? null,
         skillEstimate: parsed.skillEstimate,
       },
+      regions: parsed.regions ?? [],
+      microDrill: parsed.microDrill ?? null,
       skill: {
         score: nextScore,
         sampleCount: nextCount,
