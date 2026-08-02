@@ -101,6 +101,36 @@ export type Database = {
         }
         Relationships: []
       }
+      practice_events: {
+        Row: {
+          created_at: string
+          id: string
+          kind: string
+          skills: string[]
+          source_id: string | null
+          subject: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          kind: string
+          skills?: string[]
+          source_id?: string | null
+          subject?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          kind?: string
+          skills?: string[]
+          source_id?: string | null
+          subject?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
