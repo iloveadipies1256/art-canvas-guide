@@ -14,6 +14,26 @@ import {
   type SkillLevel,
 } from "./coach.skill";
 import { COURSE_MODULES, moduleById } from "./course";
+import { tagsFromCritique, tagsFromSubject } from "./practice";
+
+/** Records a practice event (skill-tagged) for streaks + suggestions. */
+async function logPractice(
+  supabase: any,
+  userId: string,
+  kind: "lesson" | "critique" | "module",
+  subject: string,
+  skills: string[],
+  sourceId?: string,
+) {
+  const { error } = await supabase.from("practice_events").insert({
+    user_id: userId,
+    kind,
+    subject: subject.slice(0, 200),
+    skills: [...new Set(skills)].slice(0, 6),
+    source_id: sourceId ?? null,
+  });
+  if (error) console.error("[practice_events.insert]", error);
+}
 
 export type { CoachLesson } from "./coach.schema";
 export type UserSkill = {
@@ -186,6 +206,7 @@ export const generateLesson = createServerFn({ method: "POST" })
       payload: output,
     });
     if (error) console.error("[lessons.insert]", error);
+    await logPractice(context.supabase, context.userId, "lesson", data.subject, tagsFromSubject(data.subject), data.moduleId ?? undefined);
     return {
       ...output,
       level,
