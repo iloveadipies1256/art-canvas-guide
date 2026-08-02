@@ -417,5 +417,13 @@ export const markModuleComplete = createServerFn({ method: "POST" })
         .update({ score: next })
         .eq("user_id", context.userId);
     }
+    await logPractice(
+      context.supabase,
+      context.userId,
+      "module",
+      mod.title,
+      [...tagsFromSubject(`${mod.subjectPrompt} ${mod.focus}`)],
+      mod.id,
+    );
     return { ok: true };
   });
