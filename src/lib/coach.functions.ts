@@ -291,6 +291,21 @@ export const critiqueArtwork = createServerFn({ method: "POST" })
       .update({ score: nextScore, sample_count: nextCount, self_reported: true })
       .eq("user_id", context.userId);
 
+    await logPractice(
+      context.supabase,
+      context.userId,
+      "critique",
+      data.subject,
+      [
+        ...tagsFromSubject(data.subject),
+        ...tagsFromCritique({
+          lineControl: parsed.lineControl ?? null,
+          proportion: parsed.proportion ?? null,
+          shading: parsed.shading ?? null,
+        }),
+      ],
+    );
+
     return {
       critique: parsed.critique,
       breakdown: {
