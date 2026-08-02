@@ -13,6 +13,7 @@ import {
   type UserSkill,
 } from "@/lib/coach.functions";
 import { levelBadge } from "@/lib/course";
+import { PracticeStatsPanel } from "@/components/PracticeStats";
 import type { SkillLevel } from "@/lib/coach.skill";
 import { Sparkles, Palette, GraduationCap } from "lucide-react";
 import { toast } from "sonner";
@@ -56,9 +57,26 @@ function CoachPage() {
       setLesson(res);
       setFeedbackGiven(false);
       qc.invalidateQueries({ queryKey: ["lessons"] });
+      qc.invalidateQueries({ queryKey: ["practice-stats"] });
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Coach unavailable"),
   });
+
+  function startSuggested(nextSubject: string) {
+    setSubject(nextSubject);
+    mutSuggested(nextSubject);
+  }
+
+  function mutSuggested(nextSubject: string) {
+    gen({ data: { subject: nextSubject } })
+      .then((res) => {
+        setLesson(res);
+        setFeedbackGiven(false);
+        qc.invalidateQueries({ queryKey: ["lessons"] });
+        qc.invalidateQueries({ queryKey: ["practice-stats"] });
+      })
+      .catch((e) => toast.error(e instanceof Error ? e.message : "Coach unavailable"));
+  }
 
   const seedMut = useMutation({
     mutationFn: (level: SkillLevel) => seedFn({ data: { level } }),
@@ -101,6 +119,10 @@ function CoachPage() {
           >
             <GraduationCap className="w-4 h-4" /> Follow the Learn-to-Draw course
           </Link>
+        </div>
+
+        <div className="mb-6">
+          <PracticeStatsPanel onStartSuggestion={startSuggested} />
         </div>
 
         {needsSeed && (
