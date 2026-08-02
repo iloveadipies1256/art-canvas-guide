@@ -14,6 +14,26 @@ import {
   type SkillLevel,
 } from "./coach.skill";
 import { COURSE_MODULES, moduleById } from "./course";
+import { tagsFromCritique, tagsFromSubject } from "./practice";
+
+/** Records a practice event (skill-tagged) for streaks + suggestions. */
+async function logPractice(
+  supabase: any,
+  userId: string,
+  kind: "lesson" | "critique" | "module",
+  subject: string,
+  skills: string[],
+  sourceId?: string,
+) {
+  const { error } = await supabase.from("practice_events").insert({
+    user_id: userId,
+    kind,
+    subject: subject.slice(0, 200),
+    skills: [...new Set(skills)].slice(0, 6),
+    source_id: sourceId ?? null,
+  });
+  if (error) console.error("[practice_events.insert]", error);
+}
 
 export type { CoachLesson } from "./coach.schema";
 export type UserSkill = {
@@ -186,6 +206,7 @@ export const generateLesson = createServerFn({ method: "POST" })
       payload: output,
     });
     if (error) console.error("[lessons.insert]", error);
+    await logPractice(context.supabase, context.userId, "lesson", data.subject, tagsFromSubject(data.subject), data.moduleId ?? undefined);
     return {
       ...output,
       level,
@@ -269,6 +290,21 @@ export const critiqueArtwork = createServerFn({ method: "POST" })
       .from("user_skill")
       .update({ score: nextScore, sample_count: nextCount, self_reported: true })
       .eq("user_id", context.userId);
+
+    await logPractice(
+      context.supabase,
+      context.userId,
+      "critique",
+      data.subject,
+      [
+        ...tagsFromSubject(data.subject),
+        ...tagsFromCritique({
+          lineControl: parsed.lineControl ?? null,
+          proportion: parsed.proportion ?? null,
+          shading: parsed.shading ?? null,
+        }),
+      ],
+    );
 
     return {
       critique: parsed.critique,
@@ -381,5 +417,13 @@ export const markModuleComplete = createServerFn({ method: "POST" })
         .update({ score: next })
         .eq("user_id", context.userId);
     }
+    await logPractice(
+      context.supabase,
+      context.userId,
+      "module",
+      mod.title,
+      [...tagsFromSubject(`${mod.subjectPrompt} ${mod.focus}`)],
+      mod.id,
+    );
     return { ok: true };
   });

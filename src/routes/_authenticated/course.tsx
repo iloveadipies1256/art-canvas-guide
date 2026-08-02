@@ -61,6 +61,7 @@ function CoursePage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["course-progress"] });
       qc.invalidateQueries({ queryKey: ["user-skill"] });
+      qc.invalidateQueries({ queryKey: ["practice-stats"] });
       toast.success("Module complete!");
       setLesson(null);
       setActiveId(null);
