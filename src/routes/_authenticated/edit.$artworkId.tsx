@@ -6,6 +6,7 @@ import { AppShell } from "@/components/AppShell";
 import { Studio } from "@/components/canvas/Studio";
 import { CoachDrawer } from "@/components/CoachDrawer";
 import { getArtwork, saveArtwork } from "@/lib/artwork.functions";
+import { liveNudge } from "@/lib/live.functions";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/edit/$artworkId")({
@@ -19,6 +20,7 @@ function EditPage() {
   const isNew = artworkId === "new";
   const fetchArtwork = useServerFn(getArtwork);
   const save = useServerFn(saveArtwork);
+  const nudge = useServerFn(liveNudge);
 
   const { data, isLoading } = useQuery({
     queryKey: ["artwork", artworkId],
@@ -29,6 +31,8 @@ function EditPage() {
   const [saving, setSaving] = useState(false);
   const [title, setTitle] = useState<string>(isNew ? "Untitled" : "");
   const [coachImage, setCoachImage] = useState<string | null>(null);
+  const [ghost, setGhost] = useState<string | null>(null);
+  const [liveChecking, setLiveChecking] = useState(false);
 
   if (!isNew && isLoading) {
     return <AppShell><div className="p-10 text-muted-foreground">Loading artwork…</div></AppShell>;
@@ -45,6 +49,23 @@ function EditPage() {
         artworkId={isNew ? undefined : artworkId}
         saving={saving}
         onRequestCoach={(img) => setCoachImage(img)}
+        ghostImageUrl={ghost}
+        onGhostClear={() => setGhost(null)}
+        liveChecking={liveChecking}
+        onLiveCheck={async (img) => {
+          setLiveChecking(true);
+          try {
+            const res = await nudge({ data: { imageDataUrl: img, subject: currentTitle } });
+            toast.message(res.focus || "Live check", {
+              description: [res.encouragement, ...res.nudges].filter(Boolean).join(" · "),
+              duration: 12000,
+            });
+          } catch (e) {
+            toast.error(e instanceof Error ? e.message : "Coach unavailable");
+          } finally {
+            setLiveChecking(false);
+          }
+        }}
         onSave={async ({ imageDataUrl, thumbDataUrl, width, height }) => {
           setSaving(true);
           try {
@@ -70,6 +91,7 @@ function EditPage() {
         open={!!coachImage}
         imageDataUrl={coachImage}
         subject={currentTitle}
+        onTrace={(url) => { setGhost(url); toast.success("Reference mounted as a ghost layer"); }}
         onClose={() => setCoachImage(null)}
       />
     </AppShell>

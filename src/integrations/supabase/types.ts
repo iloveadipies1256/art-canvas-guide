@@ -74,6 +74,42 @@ export type Database = {
         }
         Relationships: []
       }
+      daily_drills: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          drill_date: string
+          focus_skill: string
+          id: string
+          payload: Json | null
+          subject: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          drill_date?: string
+          focus_skill?: string
+          id?: string
+          payload?: Json | null
+          subject: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          drill_date?: string
+          focus_skill?: string
+          id?: string
+          payload?: Json | null
+          subject?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       lessons: {
         Row: {
           created_at: string
@@ -152,6 +188,45 @@ export type Database = {
           display_name?: string | null
           id?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      skill_snapshots: {
+        Row: {
+          artwork_id: string | null
+          created_at: string
+          id: string
+          line_control: number | null
+          overall: number
+          perspective: number | null
+          proportion: number | null
+          shading: number | null
+          subject: string
+          user_id: string
+        }
+        Insert: {
+          artwork_id?: string | null
+          created_at?: string
+          id?: string
+          line_control?: number | null
+          overall: number
+          perspective?: number | null
+          proportion?: number | null
+          shading?: number | null
+          subject?: string
+          user_id: string
+        }
+        Update: {
+          artwork_id?: string | null
+          created_at?: string
+          id?: string
+          line_control?: number | null
+          overall?: number
+          perspective?: number | null
+          proportion?: number | null
+          shading?: number | null
+          subject?: string
+          user_id?: string
         }
         Relationships: []
       }

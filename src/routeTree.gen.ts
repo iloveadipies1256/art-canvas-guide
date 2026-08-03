@@ -18,7 +18,9 @@ import { Route as Char91DotmcpChar93ListToolsRouteImport } from './routes/[.mcp]
 import { Route as Char91DotwellKnownChar93OauthProtectedResourceRouteImport } from './routes/[.well-known]/oauth-protected-resource'
 import { Route as AuthenticatedCoachRouteImport } from './routes/_authenticated/coach'
 import { Route as AuthenticatedCourseRouteImport } from './routes/_authenticated/course'
+import { Route as AuthenticatedDrillRouteImport } from './routes/_authenticated/drill'
 import { Route as AuthenticatedGalleryRouteImport } from './routes/_authenticated/gallery'
+import { Route as AuthenticatedProgressRouteImport } from './routes/_authenticated/progress'
 import { Route as DotlovableOauthConsentRouteImport } from './routes/[.]lovable.oauth.consent'
 import { Route as Char91DotmcpChar93InvokeToolToolRouteImport } from './routes/[.mcp]/invoke-tool/$tool'
 import { Route as AuthenticatedEditArtworkIdRouteImport } from './routes/_authenticated/edit.$artworkId'
@@ -69,9 +71,19 @@ const AuthenticatedCourseRoute = AuthenticatedCourseRouteImport.update({
   path: '/course',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedDrillRoute = AuthenticatedDrillRouteImport.update({
+  id: '/drill',
+  path: '/drill',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedGalleryRoute = AuthenticatedGalleryRouteImport.update({
   id: '/gallery',
   path: '/gallery',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedProgressRoute = AuthenticatedProgressRouteImport.update({
+  id: '/progress',
+  path: '/progress',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const DotlovableOauthConsentRoute = DotlovableOauthConsentRouteImport.update({
@@ -101,7 +113,9 @@ export interface FileRoutesByFullPath {
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/coach': typeof AuthenticatedCoachRoute
   '/course': typeof AuthenticatedCourseRoute
+  '/drill': typeof AuthenticatedDrillRoute
   '/gallery': typeof AuthenticatedGalleryRoute
+  '/progress': typeof AuthenticatedProgressRoute
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/edit/$artworkId': typeof AuthenticatedEditArtworkIdRoute
@@ -115,7 +129,9 @@ export interface FileRoutesByTo {
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/coach': typeof AuthenticatedCoachRoute
   '/course': typeof AuthenticatedCourseRoute
+  '/drill': typeof AuthenticatedDrillRoute
   '/gallery': typeof AuthenticatedGalleryRoute
+  '/progress': typeof AuthenticatedProgressRoute
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/edit/$artworkId': typeof AuthenticatedEditArtworkIdRoute
@@ -131,7 +147,9 @@ export interface FileRoutesById {
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/_authenticated/coach': typeof AuthenticatedCoachRoute
   '/_authenticated/course': typeof AuthenticatedCourseRoute
+  '/_authenticated/drill': typeof AuthenticatedDrillRoute
   '/_authenticated/gallery': typeof AuthenticatedGalleryRoute
+  '/_authenticated/progress': typeof AuthenticatedProgressRoute
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/_authenticated/edit/$artworkId': typeof AuthenticatedEditArtworkIdRoute
@@ -147,7 +165,9 @@ export interface FileRouteTypes {
     | '/.well-known/oauth-protected-resource'
     | '/coach'
     | '/course'
+    | '/drill'
     | '/gallery'
+    | '/progress'
     | '/.lovable/oauth/consent'
     | '/.mcp/invoke-tool/$tool'
     | '/edit/$artworkId'
@@ -161,7 +181,9 @@ export interface FileRouteTypes {
     | '/.well-known/oauth-protected-resource'
     | '/coach'
     | '/course'
+    | '/drill'
     | '/gallery'
+    | '/progress'
     | '/.lovable/oauth/consent'
     | '/.mcp/invoke-tool/$tool'
     | '/edit/$artworkId'
@@ -176,7 +198,9 @@ export interface FileRouteTypes {
     | '/.well-known/oauth-protected-resource'
     | '/_authenticated/coach'
     | '/_authenticated/course'
+    | '/_authenticated/drill'
     | '/_authenticated/gallery'
+    | '/_authenticated/progress'
     | '/.lovable/oauth/consent'
     | '/.mcp/invoke-tool/$tool'
     | '/_authenticated/edit/$artworkId'
@@ -259,11 +283,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedCourseRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/drill': {
+      id: '/_authenticated/drill'
+      path: '/drill'
+      fullPath: '/drill'
+      preLoaderRoute: typeof AuthenticatedDrillRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/gallery': {
       id: '/_authenticated/gallery'
       path: '/gallery'
       fullPath: '/gallery'
       preLoaderRoute: typeof AuthenticatedGalleryRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/progress': {
+      id: '/_authenticated/progress'
+      path: '/progress'
+      fullPath: '/progress'
+      preLoaderRoute: typeof AuthenticatedProgressRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/.lovable/oauth/consent': {
@@ -293,14 +331,18 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedCoachRoute: typeof AuthenticatedCoachRoute
   AuthenticatedCourseRoute: typeof AuthenticatedCourseRoute
+  AuthenticatedDrillRoute: typeof AuthenticatedDrillRoute
   AuthenticatedGalleryRoute: typeof AuthenticatedGalleryRoute
+  AuthenticatedProgressRoute: typeof AuthenticatedProgressRoute
   AuthenticatedEditArtworkIdRoute: typeof AuthenticatedEditArtworkIdRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedCoachRoute: AuthenticatedCoachRoute,
   AuthenticatedCourseRoute: AuthenticatedCourseRoute,
+  AuthenticatedDrillRoute: AuthenticatedDrillRoute,
   AuthenticatedGalleryRoute: AuthenticatedGalleryRoute,
+  AuthenticatedProgressRoute: AuthenticatedProgressRoute,
   AuthenticatedEditArtworkIdRoute: AuthenticatedEditArtworkIdRoute,
 }
 
