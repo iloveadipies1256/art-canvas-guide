@@ -768,9 +768,52 @@ export function Studio(props: StudioProps) {
             </div>
           </div>
 
+          {props.ghostImageUrl && (
+            <div className="p-3 border-b border-border/60">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-mono uppercase tracking-widest text-neon-cyan flex items-center gap-1.5">
+                  <LayersIcon className="w-3 h-3" /> Ghost trace
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => { setGhostVisible((v) => !v); }}
+                    className="text-foreground/70 hover:text-foreground"
+                    aria-label="Toggle ghost layer"
+                  >
+                    {ghostVisible ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                  </button>
+                  {props.onGhostClear && (
+                    <button
+                      onClick={props.onGhostClear}
+                      className="text-foreground/70 hover:text-destructive"
+                      aria-label="Remove ghost layer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+              <label className="text-[10px] font-mono uppercase tracking-widest text-foreground/80 mt-2 block">
+                Opacity <span className="text-foreground ml-1">{Math.round(ghostOpacity * 100)}%</span>
+              </label>
+              <input
+                type="range"
+                min={0}
+                max={0.8}
+                step={0.01}
+                value={ghostOpacity}
+                onChange={(e) => setGhostOpacity(parseFloat(e.target.value))}
+                className="w-full accent-accent"
+                aria-label="Ghost layer opacity"
+              />
+              <p className="text-[10px] text-muted-foreground">
+                Trace over it, then fade it out as the shapes start landing on their own.
+              </p>
+            </div>
+          )}
+
           <div className="p-3 flex items-center justify-between border-b border-border/60">
             <span className="text-[10px] font-mono uppercase tracking-widest text-foreground/80">Layers</span>
-            <button onClick={addLayer} className="text-neon-violet hover:opacity-80" aria-label="Add layer">
             <button onClick={addLayer} className="text-neon-violet hover:opacity-80" aria-label="Add layer">
               <Plus className="w-4 h-4" />
             </button>
