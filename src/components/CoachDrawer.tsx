@@ -153,11 +153,14 @@ export function CoachDrawer({
   imageDataUrl,
   subject,
   onClose,
+  onTrace,
 }: {
   open: boolean;
   imageDataUrl: string | null;
   subject: string;
   onClose: () => void;
+  /** Mount a step reference on the canvas as a ghost tracing layer. */
+  onTrace?: (imageDataUrl: string) => void;
 }) {
   const gen = useServerFn(generateLesson);
   const crit = useServerFn(critiqueArtwork);
@@ -272,11 +275,22 @@ export function CoachDrawer({
                       </p>
                       <p className="text-xs text-muted-foreground mt-1">Tip: {s.tip}</p>
                       {stepImages[s.n] ? (
-                        <img
-                          src={stepImages[s.n]}
-                          alt={`Step ${s.n} reference`}
-                          className="mt-2 rounded-md border border-border w-full"
-                        />
+                        <div className="mt-2">
+                          <img
+                            src={stepImages[s.n]}
+                            alt={`Step ${s.n} reference`}
+                            className="rounded-md border border-border w-full"
+                          />
+                          {onTrace && (
+                            <button
+                              type="button"
+                              onClick={(e) => { e.preventDefault(); onTrace(stepImages[s.n]); }}
+                              className="mt-1.5 inline-flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-wider text-neon-violet hover:opacity-80"
+                            >
+                              <ImageIcon className="w-3 h-3" /> Trace this on canvas
+                            </button>
+                          )}
+                        </div>
                       ) : loadingStep === s.n ? (
                         <div className="mt-2 rounded-md border border-border w-full aspect-square bg-secondary/50 overflow-hidden relative">
                           <div className="absolute inset-0 animate-pulse bg-gradient-to-br from-primary/10 via-transparent to-accent/10" />

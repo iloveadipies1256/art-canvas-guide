@@ -1,6 +1,6 @@
 import { Link, useRouter } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
-import { Palette, Images, Sparkles, LogOut, GraduationCap } from "lucide-react";
+import { Palette, Images, Sparkles, LogOut, GraduationCap, TrendingUp, Timer } from "lucide-react";
 import type { ReactNode } from "react";
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -17,6 +17,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             <NavLink to="/gallery" icon={<Images className="w-4 h-4" />}>Gallery</NavLink>
             <NavLink to="/coach" icon={<Sparkles className="w-4 h-4" />}>Coach</NavLink>
             <NavLink to="/course" icon={<GraduationCap className="w-4 h-4" />}>Course</NavLink>
+            <NavLink to="/drill" icon={<Timer className="w-4 h-4" />}>Drill</NavLink>
+            <NavLink to="/progress" icon={<TrendingUp className="w-4 h-4" />}>Progress</NavLink>
             <NavLink to="/edit/new" icon={<Palette className="w-4 h-4" />}>New</NavLink>
             <button
               onClick={async () => {
