@@ -83,6 +83,7 @@ const CritiqueSchema = z.object({
   lineControl: z.number().min(0).max(100).optional(),
   proportion: z.number().min(0).max(100).optional(),
   shading: z.number().min(0).max(100).optional(),
+  perspective: z.number().min(0).max(100).optional(),
   // New: 0-3 flagged regions, worst-first. Empty array is fine (a clean piece
   // doesn't need to be flagged just to have something to show).
   regions: z.array(CritiqueRegionSchema).max(3).optional().default([]),
@@ -238,7 +239,7 @@ export const critiqueArtwork = createServerFn({ method: "POST" })
         system:
           "You are a kind, precise drawing coach AND a skill assessor. Look at the drawing and produce JSON with: " +
           "critique (2-4 sentences: one real strength, one concrete adjustment, one micro-exercise; never harsh), " +
-          "lineControl 0-100, proportion 0-100, shading 0-100 (rate what you visibly see; 0 = absent/very shaky, 50 = solid beginner, 75 = confident intermediate, 90+ = trained). " +
+          "lineControl 0-100, proportion 0-100, shading 0-100, perspective 0-100 (rate what you visibly see; 0 = absent/very shaky, 50 = solid beginner, 75 = confident intermediate, 90+ = trained). " +
           "skillEstimate is your overall 0-100 assessment weighting line control, proportion, and use of value/shading roughly equally. " +
           "level is 'beginner' (<35), 'intermediate' (35-70), or 'advanced' (70+) matching skillEstimate. Do not inflate scores to be nice. " +
           "ALSO identify up to 3 specific regions of the image that have the clearest, most fixable issues (worst first). " +
@@ -291,6 +292,20 @@ export const critiqueArtwork = createServerFn({ method: "POST" })
       .update({ score: nextScore, sample_count: nextCount, self_reported: true })
       .eq("user_id", context.userId);
 
+    // Time-series snapshot so the Progress page can chart improvement.
+    {
+      const { error: snapErr } = await (context.supabase as any).from("skill_snapshots").insert({
+        user_id: context.userId,
+        subject: data.subject.slice(0, 200),
+        line_control: parsed.lineControl ?? null,
+        proportion: parsed.proportion ?? null,
+        shading: parsed.shading ?? null,
+        perspective: parsed.perspective ?? null,
+        overall: nextScore,
+      });
+      if (snapErr) console.error("[skill_snapshots.insert]", snapErr);
+    }
+
     await logPractice(
       context.supabase,
       context.userId,
@@ -312,6 +327,7 @@ export const critiqueArtwork = createServerFn({ method: "POST" })
         lineControl: parsed.lineControl ?? null,
         proportion: parsed.proportion ?? null,
         shading: parsed.shading ?? null,
+        perspective: parsed.perspective ?? null,
         skillEstimate: parsed.skillEstimate,
       },
       regions: parsed.regions ?? [],

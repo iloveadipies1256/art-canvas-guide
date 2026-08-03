@@ -28,6 +28,8 @@ import {
   ZoomIn,
   ZoomOut,
   Maximize2,
+  Layers as LayersIcon,
+  Radar,
 } from "lucide-react";
 import type { BrushKind, Layer, ShapeKind, Tool } from "./types";
 import { applyBrushSettings, drawStrokeSegment } from "./brushes";
@@ -102,6 +104,14 @@ export interface StudioProps {
   onTitleChange?: (t: string) => void;
   initialImageUrl?: string | null;
   artworkId?: string;
+  /** Reference image mounted under the artwork as a dimmable tracing underlay. */
+  ghostImageUrl?: string | null;
+  /** 0-1 starting opacity for the ghost layer (lower as skill rises). */
+  ghostDefaultOpacity?: number;
+  onGhostClear?: () => void;
+  /** Mid-drawing coaching: receives a flattened snapshot of the work in progress. */
+  onLiveCheck?: (imageDataUrl: string) => void;
+  liveChecking?: boolean;
   onSave?: (payload: {
     imageDataUrl: string;
     thumbDataUrl: string;
@@ -122,6 +132,9 @@ export function Studio(props: StudioProps) {
   const [color, setColor] = useState("#F5F3FF");
   const [size, setSize] = useState(6);
   const [canvasBg, setCanvasBg] = useState("#0B0B12");
+  const [ghostOpacity, setGhostOpacity] = useState(props.ghostDefaultOpacity ?? 0.35);
+  const [ghostVisible, setGhostVisible] = useState(true);
+  const ghostImgRef = useRef<HTMLImageElement | null>(null);
   const [title, setTitle] = useState(props.title);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -197,13 +210,45 @@ export function Studio(props: StudioProps) {
     ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
     ctx.fillStyle = canvasBg;
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    const ghost = ghostImgRef.current;
+    if (ghost && ghostVisible && ghost.complete && ghost.naturalWidth > 0) {
+      // Contain the reference inside the canvas so proportions stay honest.
+      const scale = Math.min(CANVAS_W / ghost.naturalWidth, CANVAS_H / ghost.naturalHeight);
+      const w = ghost.naturalWidth * scale;
+      const h = ghost.naturalHeight * scale;
+      ctx.globalAlpha = ghostOpacity;
+      ctx.drawImage(ghost, (CANVAS_W - w) / 2, (CANVAS_H - h) / 2, w, h);
+      ctx.globalAlpha = 1;
+    }
     for (const l of layers) {
       if (!l.visible) continue;
       ctx.globalAlpha = l.opacity;
       ctx.drawImage(l.canvas, 0, 0);
     }
     ctx.globalAlpha = 1;
-  }, [layers, canvasBg]);
+  }, [layers, canvasBg, ghostOpacity, ghostVisible]);
+
+  // Load / swap the ghost reference image.
+  useEffect(() => {
+    if (!props.ghostImageUrl) {
+      ghostImgRef.current = null;
+      renderComposite();
+      return;
+    }
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      ghostImgRef.current = img;
+      setGhostVisible(true);
+      renderComposite();
+    };
+    img.src = props.ghostImageUrl;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.ghostImageUrl]);
+
+  useEffect(() => {
+    if (props.ghostDefaultOpacity !== undefined) setGhostOpacity(props.ghostDefaultOpacity);
+  }, [props.ghostDefaultOpacity]);
 
   useEffect(() => {
     renderComposite();
@@ -568,6 +613,17 @@ export function Studio(props: StudioProps) {
             <Sparkles className="w-3.5 h-3.5" /> Ask coach
           </button>
         )}
+        {props.onLiveCheck && (
+          <button
+            onClick={() => props.onLiveCheck!(flatten().toDataURL("image/png"))}
+            disabled={props.liveChecking}
+            title="Coach checks your work in progress"
+            className="hidden sm:flex px-3 py-1.5 rounded-md border border-primary/50 text-neon-violet text-xs font-mono uppercase tracking-wider hover:bg-primary/10 disabled:opacity-50 items-center gap-1.5"
+          >
+            <Radar className={`w-3.5 h-3.5 ${props.liveChecking ? "animate-spin" : ""}`} />
+            {props.liveChecking ? "Watching…" : "Live check"}
+          </button>
+        )}
         <IconBtn onClick={exportPng} title="Export PNG"><Download className="w-4 h-4" /></IconBtn>
         {props.onSave && (
           <button
@@ -714,6 +770,10 @@ export function Studio(props: StudioProps) {
 
           <div className="p-3 flex items-center justify-between border-b border-border/60">
             <span className="text-[10px] font-mono uppercase tracking-widest text-foreground/80">Layers</span>
+
+          {ghostImgRef.current && (
+            <></>
+          )}
             <button onClick={addLayer} className="text-neon-violet hover:opacity-80" aria-label="Add layer">
               <Plus className="w-4 h-4" />
             </button>
