@@ -770,10 +770,7 @@ export function Studio(props: StudioProps) {
 
           <div className="p-3 flex items-center justify-between border-b border-border/60">
             <span className="text-[10px] font-mono uppercase tracking-widest text-foreground/80">Layers</span>
-
-          {ghostImgRef.current && (
-            <></>
-          )}
+            <button onClick={addLayer} className="text-neon-violet hover:opacity-80" aria-label="Add layer">
             <button onClick={addLayer} className="text-neon-violet hover:opacity-80" aria-label="Add layer">
               <Plus className="w-4 h-4" />
             </button>
