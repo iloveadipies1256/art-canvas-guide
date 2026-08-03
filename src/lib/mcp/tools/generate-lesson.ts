@@ -17,7 +17,10 @@ export default defineTool({
       .describe("Learner skill level."),
   },
   annotations: { readOnlyHint: true, openWorldHint: true },
-  handler: async ({ subject, skillLevel }, _ctx: ToolContext) => {
+  handler: async ({ subject, skillLevel }, ctx: ToolContext) => {
+    if (!ctx.isAuthenticated()) {
+      return { content: [{ type: "text", text: "Not authenticated" }], isError: true };
+    }
     const key = process.env.LOVABLE_API_KEY;
     if (!key) {
       return { content: [{ type: "text", text: "Missing LOVABLE_API_KEY" }], isError: true };
