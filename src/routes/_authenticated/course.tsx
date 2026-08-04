@@ -3,6 +3,9 @@ import { useServerFn } from "@tanstack/react-start";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
+import { Studio } from "@/components/canvas/Studio";
+import { saveArtwork } from "@/lib/artwork.functions";
+import { liveNudge } from "@/lib/live.functions";
 import {
   generateLesson,
   getCourseProgress,
@@ -31,10 +34,14 @@ function CoursePage() {
   const progressFn = useServerFn(getCourseProgress);
   const skillFn = useServerFn(getUserSkill);
   const completeFn = useServerFn(markModuleComplete);
+  const save = useServerFn(saveArtwork);
+  const nudge = useServerFn(liveNudge);
   const qc = useQueryClient();
 
   const [activeId, setActiveId] = useState<string | null>(null);
   const [lesson, setLesson] = useState<(CoachLesson & { level?: SkillLevel }) | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [liveChecking, setLiveChecking] = useState(false);
 
   const { data: skill } = useQuery<UserSkill>({ queryKey: ["user-skill"], queryFn: () => skillFn() });
   const { data: progress } = useQuery({ queryKey: ["course-progress"], queryFn: () => progressFn() });
@@ -187,6 +194,45 @@ function CoursePage() {
             <div className="mt-4 p-4 rounded-lg border border-accent/40 bg-accent/5">
               <p className="text-xs font-mono uppercase tracking-widest text-neon-cyan mb-1">Bonus challenge</p>
               <p>{lesson.challenge}</p>
+            </div>
+
+            <div className="mt-6 p-4 rounded-lg border border-border bg-secondary/30">
+              <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-3 text-center">
+                Practice it here
+              </p>
+              <div className="rounded-lg overflow-hidden border border-border">
+                <Studio
+                  title={lesson.title}
+                  saving={saving}
+                  liveChecking={liveChecking}
+                  onLiveCheck={async (img) => {
+                    setLiveChecking(true);
+                    try {
+                      const res = await nudge({ data: { imageDataUrl: img, subject: lesson.title } });
+                      toast.message(res.focus || "Live check", {
+                        description: [res.encouragement, ...res.nudges].filter(Boolean).join(" · "),
+                        duration: 12000,
+                      });
+                    } catch (e) {
+                      toast.error(e instanceof Error ? e.message : "Coach unavailable");
+                    } finally {
+                      setLiveChecking(false);
+                    }
+                  }}
+                  onSave={async ({ imageDataUrl, thumbDataUrl, width, height }) => {
+                    setSaving(true);
+                    try {
+                      await save({
+                        data: { title: lesson.title, width, height, imageDataUrl, thumbDataUrl },
+                      });
+                      toast.success("Saved to your gallery");
+                      qc.invalidateQueries({ queryKey: ["artworks"] });
+                    } finally {
+                      setSaving(false);
+                    }
+                  }}
+                />
+              </div>
             </div>
 
             <div className="mt-6 p-4 rounded-lg border border-border bg-secondary/30">
