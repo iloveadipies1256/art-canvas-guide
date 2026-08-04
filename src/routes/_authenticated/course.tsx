@@ -3,6 +3,9 @@ import { useServerFn } from "@tanstack/react-start";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
+import { Studio } from "@/components/canvas/Studio";
+import { saveArtwork } from "@/lib/artwork.functions";
+import { liveNudge } from "@/lib/live.functions";
 import {
   generateLesson,
   getCourseProgress,
@@ -31,10 +34,14 @@ function CoursePage() {
   const progressFn = useServerFn(getCourseProgress);
   const skillFn = useServerFn(getUserSkill);
   const completeFn = useServerFn(markModuleComplete);
+  const save = useServerFn(saveArtwork);
+  const nudge = useServerFn(liveNudge);
   const qc = useQueryClient();
 
   const [activeId, setActiveId] = useState<string | null>(null);
   const [lesson, setLesson] = useState<(CoachLesson & { level?: SkillLevel }) | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [liveChecking, setLiveChecking] = useState(false);
 
   const { data: skill } = useQuery<UserSkill>({ queryKey: ["user-skill"], queryFn: () => skillFn() });
   const { data: progress } = useQuery({ queryKey: ["course-progress"], queryFn: () => progressFn() });
