@@ -198,6 +198,45 @@ function CoursePage() {
 
             <div className="mt-6 p-4 rounded-lg border border-border bg-secondary/30">
               <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-3 text-center">
+                Practice it here
+              </p>
+              <div className="rounded-lg overflow-hidden border border-border">
+                <Studio
+                  title={lesson.title}
+                  saving={saving}
+                  liveChecking={liveChecking}
+                  onLiveCheck={async (img) => {
+                    setLiveChecking(true);
+                    try {
+                      const res = await nudge({ data: { imageDataUrl: img, subject: lesson.title } });
+                      toast.message(res.focus || "Live check", {
+                        description: [res.encouragement, ...res.nudges].filter(Boolean).join(" · "),
+                        duration: 12000,
+                      });
+                    } catch (e) {
+                      toast.error(e instanceof Error ? e.message : "Coach unavailable");
+                    } finally {
+                      setLiveChecking(false);
+                    }
+                  }}
+                  onSave={async ({ imageDataUrl, thumbDataUrl, width, height }) => {
+                    setSaving(true);
+                    try {
+                      await save({
+                        data: { title: lesson.title, width, height, imageDataUrl, thumbDataUrl },
+                      });
+                      toast.success("Saved to your gallery");
+                      qc.invalidateQueries({ queryKey: ["artworks"] });
+                    } finally {
+                      setSaving(false);
+                    }
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="mt-6 p-4 rounded-lg border border-border bg-secondary/30">
+              <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-3 text-center">
                 Mark this module complete
               </p>
               <div className="grid grid-cols-3 gap-2">
