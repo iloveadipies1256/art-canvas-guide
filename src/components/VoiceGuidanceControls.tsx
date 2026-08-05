@@ -1,5 +1,5 @@
-import { Volume2, VolumeX, Pause, Play, RotateCcw } from "lucide-react";
-import type { VoiceGuidance } from "@/hooks/useVoiceGuidance";
+import { Volume2, VolumeX, Pause, Play, RotateCcw, Loader2 } from "lucide-react";
+import { VOICE_OPTIONS, type VoiceGuidance } from "@/hooks/useVoiceGuidance";
 
 export function VoiceGuidanceControls({
   voice,
@@ -33,12 +33,31 @@ export function VoiceGuidanceControls({
             : "border-border text-muted-foreground hover:text-foreground hover:border-primary"
         }`}
       >
-        {voice.enabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+        {voice.loading ? (
+          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+        ) : voice.enabled ? (
+          <Volume2 className="w-3.5 h-3.5" />
+        ) : (
+          <VolumeX className="w-3.5 h-3.5" />
+        )}
         {compact ? "Voice" : voice.enabled ? "Voice guidance on" : "Voice guidance off"}
       </button>
 
       {voice.enabled && (
         <>
+          <select
+            value={voice.voiceName}
+            onChange={(e) => voice.setVoiceName(e.target.value)}
+            aria-label="Narrator voice"
+            title="Narrator voice"
+            className="h-8 rounded-md border border-border bg-background px-2 font-mono text-[11px] text-muted-foreground hover:text-foreground hover:border-primary focus:outline-none focus:border-primary"
+          >
+            {VOICE_OPTIONS.map((v) => (
+              <option key={v.id} value={v.id}>
+                {compact ? v.label.split(" — ")[0] : v.label}
+              </option>
+            ))}
+          </select>
           <button
             type="button"
             onClick={() => (voice.paused ? voice.resume() : voice.pause())}
