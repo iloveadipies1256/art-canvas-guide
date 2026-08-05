@@ -11,6 +11,8 @@ import {
 } from "@/lib/coach.functions";
 import { Sparkles, X, MessageSquareText, Image as ImageIcon, Loader2, Timer, Play, Pause, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
+import { useVoiceGuidance, useAutoSpeakStep } from "@/hooks/useVoiceGuidance";
+import { VoiceGuidanceControls } from "@/components/VoiceGuidanceControls";
 
 const stepImageCache = new Map<string, string>();
 const cacheKey = (subject: string, instruction: string) => `${subject}|||${instruction}`;
@@ -174,10 +176,17 @@ export function CoachDrawer({
   const [critiquedImage, setCritiquedImage] = useState<string | null>(null);
   const [stepImages, setStepImages] = useState<Record<number, string>>({});
   const [loadingStep, setLoadingStep] = useState<number | null>(null);
+  const voice = useVoiceGuidance();
+
+  const activeStep = lesson?.steps.find((s) => !done[s.n]) ?? null;
+  useAutoSpeakStep(
+    voice,
+    open && activeStep ? `Step ${activeStep.n}. ${activeStep.instruction}. Tip: ${activeStep.tip}` : null,
+  );
 
   const lessonMut = useMutation({
     mutationFn: (subj: string) => gen({ data: { subject: subj, skillLevel: "beginner" } }),
-    onSuccess: (res) => { setLesson(res); setDone({}); setCritique(null); setCritiqueRegions([]); setMicroDrill(null); setStepImages({}); },
+    onSuccess: (res) => { voice.stop(); setLesson(res); setDone({}); setCritique(null); setCritiqueRegions([]); setMicroDrill(null); setStepImages({}); },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Coach unavailable"),
   });
 
@@ -227,7 +236,11 @@ export function CoachDrawer({
           <Sparkles className="w-4 h-4 text-neon-cyan" />
           <h2 className="font-display font-bold">AI Coach</h2>
         </div>
-        <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+        <button onClick={() => { voice.stop(); onClose(); }} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+      </div>
+
+      <div className="px-4 py-2 border-b border-border/60">
+        <VoiceGuidanceControls voice={voice} compact />
       </div>
 
       <div className="p-4 border-b border-border/60">
@@ -260,12 +273,21 @@ export function CoachDrawer({
             )}
             <ol className="mt-4 space-y-3">
               {lesson.steps.map((s) => (
-                <li key={s.n} className={`rounded-lg border p-3 ${done[s.n] ? "border-accent/40 bg-accent/5" : "border-border/60"}`}>
+                <li
+                  key={s.n}
+                  className={`rounded-lg border p-3 ${
+                    done[s.n]
+                      ? "border-accent/40 bg-accent/5"
+                      : activeStep?.n === s.n
+                        ? "border-primary/60 bg-primary/5"
+                        : "border-border/60"
+                  }`}
+                >
                   <label className="flex items-start gap-2 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={!!done[s.n]}
-                      onChange={(e) => setDone((d) => ({ ...d, [s.n]: e.target.checked }))}
+                      onChange={(e) => { voice.stop(); setDone((d) => ({ ...d, [s.n]: e.target.checked })); }}
                       className="mt-1 accent-primary"
                     />
                     <div className="flex-1">
