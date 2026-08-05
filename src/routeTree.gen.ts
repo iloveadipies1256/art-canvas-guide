@@ -21,6 +21,7 @@ import { Route as AuthenticatedCourseRouteImport } from './routes/_authenticated
 import { Route as AuthenticatedDrillRouteImport } from './routes/_authenticated/drill'
 import { Route as AuthenticatedGalleryRouteImport } from './routes/_authenticated/gallery'
 import { Route as AuthenticatedProgressRouteImport } from './routes/_authenticated/progress'
+import { Route as ApiTtsRouteImport } from './routes/api/tts'
 import { Route as DotlovableOauthConsentRouteImport } from './routes/[.]lovable.oauth.consent'
 import { Route as Char91DotmcpChar93InvokeToolToolRouteImport } from './routes/[.mcp]/invoke-tool/$tool'
 import { Route as AuthenticatedEditArtworkIdRouteImport } from './routes/_authenticated/edit.$artworkId'
@@ -86,6 +87,11 @@ const AuthenticatedProgressRoute = AuthenticatedProgressRouteImport.update({
   path: '/progress',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const ApiTtsRoute = ApiTtsRouteImport.update({
+  id: '/api/tts',
+  path: '/api/tts',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DotlovableOauthConsentRoute = DotlovableOauthConsentRouteImport.update({
   id: '/.lovable/oauth/consent',
   path: '/.lovable/oauth/consent',
@@ -116,6 +122,7 @@ export interface FileRoutesByFullPath {
   '/drill': typeof AuthenticatedDrillRoute
   '/gallery': typeof AuthenticatedGalleryRoute
   '/progress': typeof AuthenticatedProgressRoute
+  '/api/tts': typeof ApiTtsRoute
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/edit/$artworkId': typeof AuthenticatedEditArtworkIdRoute
@@ -132,6 +139,7 @@ export interface FileRoutesByTo {
   '/drill': typeof AuthenticatedDrillRoute
   '/gallery': typeof AuthenticatedGalleryRoute
   '/progress': typeof AuthenticatedProgressRoute
+  '/api/tts': typeof ApiTtsRoute
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/edit/$artworkId': typeof AuthenticatedEditArtworkIdRoute
@@ -150,6 +158,7 @@ export interface FileRoutesById {
   '/_authenticated/drill': typeof AuthenticatedDrillRoute
   '/_authenticated/gallery': typeof AuthenticatedGalleryRoute
   '/_authenticated/progress': typeof AuthenticatedProgressRoute
+  '/api/tts': typeof ApiTtsRoute
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/_authenticated/edit/$artworkId': typeof AuthenticatedEditArtworkIdRoute
@@ -168,6 +177,7 @@ export interface FileRouteTypes {
     | '/drill'
     | '/gallery'
     | '/progress'
+    | '/api/tts'
     | '/.lovable/oauth/consent'
     | '/.mcp/invoke-tool/$tool'
     | '/edit/$artworkId'
@@ -184,6 +194,7 @@ export interface FileRouteTypes {
     | '/drill'
     | '/gallery'
     | '/progress'
+    | '/api/tts'
     | '/.lovable/oauth/consent'
     | '/.mcp/invoke-tool/$tool'
     | '/edit/$artworkId'
@@ -201,6 +212,7 @@ export interface FileRouteTypes {
     | '/_authenticated/drill'
     | '/_authenticated/gallery'
     | '/_authenticated/progress'
+    | '/api/tts'
     | '/.lovable/oauth/consent'
     | '/.mcp/invoke-tool/$tool'
     | '/_authenticated/edit/$artworkId'
@@ -214,6 +226,7 @@ export interface RootRouteChildren {
   StudioRoute: typeof StudioRoute
   Char91DotmcpChar93ListToolsRoute: typeof Char91DotmcpChar93ListToolsRoute
   Char91DotwellKnownChar93OauthProtectedResourceRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
+  ApiTtsRoute: typeof ApiTtsRoute
   DotlovableOauthConsentRoute: typeof DotlovableOauthConsentRoute
   Char91DotmcpChar93InvokeToolToolRoute: typeof Char91DotmcpChar93InvokeToolToolRoute
 }
@@ -304,6 +317,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedProgressRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/api/tts': {
+      id: '/api/tts'
+      path: '/api/tts'
+      fullPath: '/api/tts'
+      preLoaderRoute: typeof ApiTtsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/.lovable/oauth/consent': {
       id: '/.lovable/oauth/consent'
       path: '/.lovable/oauth/consent'
@@ -358,6 +378,7 @@ const rootRouteChildren: RootRouteChildren = {
   Char91DotmcpChar93ListToolsRoute: Char91DotmcpChar93ListToolsRoute,
   Char91DotwellKnownChar93OauthProtectedResourceRoute:
     Char91DotwellKnownChar93OauthProtectedResourceRoute,
+  ApiTtsRoute: ApiTtsRoute,
   DotlovableOauthConsentRoute: DotlovableOauthConsentRoute,
   Char91DotmcpChar93InvokeToolToolRoute: Char91DotmcpChar93InvokeToolToolRoute,
 }
