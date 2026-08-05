@@ -18,6 +18,8 @@ import { COURSE_MODULES, levelBadge } from "@/lib/course";
 import type { SkillLevel } from "@/lib/coach.skill";
 import { CheckCircle2, Circle, GraduationCap, Sparkles, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { useVoiceGuidance, useAutoSpeakStep } from "@/hooks/useVoiceGuidance";
+import { VoiceGuidanceControls } from "@/components/VoiceGuidanceControls";
 
 export const Route = createFileRoute("/_authenticated/course")({
   head: () => ({
@@ -42,6 +44,13 @@ function CoursePage() {
   const [lesson, setLesson] = useState<(CoachLesson & { level?: SkillLevel }) | null>(null);
   const [saving, setSaving] = useState(false);
   const [liveChecking, setLiveChecking] = useState(false);
+  const [done, setDone] = useState<Record<number, boolean>>({});
+  const voice = useVoiceGuidance();
+  const activeStep = lesson?.steps.find((s) => !done[s.n]) ?? null;
+  useAutoSpeakStep(
+    voice,
+    activeStep ? `Step ${activeStep.n}. ${activeStep.instruction}. Tip: ${activeStep.tip}` : null,
+  );
 
   const { data: skill } = useQuery<UserSkill>({ queryKey: ["user-skill"], queryFn: () => skillFn() });
   const { data: progress } = useQuery({ queryKey: ["course-progress"], queryFn: () => progressFn() });
@@ -58,7 +67,7 @@ function CoursePage() {
       setActiveId(moduleId);
       return gen({ data: { subject: mod.subjectPrompt, moduleId } });
     },
-    onSuccess: (res) => setLesson(res),
+    onSuccess: (res) => { voice.stop(); setDone({}); setLesson(res); },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Coach unavailable"),
   });
 
@@ -70,6 +79,8 @@ function CoursePage() {
       qc.invalidateQueries({ queryKey: ["user-skill"] });
       qc.invalidateQueries({ queryKey: ["practice-stats"] });
       toast.success("Module complete!");
+      voice.stop();
+      setDone({});
       setLesson(null);
       setActiveId(null);
     },
@@ -180,14 +191,34 @@ function CoursePage() {
             </p>
             <h2 className="font-display font-bold text-2xl">{lesson.title}</h2>
             <p className="text-xs text-muted-foreground font-mono mt-1">{lesson.materials.join(" · ")}</p>
+            <VoiceGuidanceControls voice={voice} className="mt-4" />
             <ol className="space-y-3 mt-5">
               {lesson.steps.map((s) => (
-                <li key={s.n} className="rounded-lg border border-border p-4">
-                  <p>
-                    <span className="font-mono text-neon-violet mr-2">{String(s.n).padStart(2, "0")}</span>
-                    {s.instruction}
-                  </p>
-                  <p className="text-sm text-muted-foreground mt-1">Tip: {s.tip}</p>
+                <li
+                  key={s.n}
+                  className={`rounded-lg border p-4 ${
+                    done[s.n]
+                      ? "border-accent/40 bg-accent/5"
+                      : activeStep?.n === s.n
+                        ? "border-primary/60 bg-primary/5"
+                        : "border-border"
+                  }`}
+                >
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={!!done[s.n]}
+                      onChange={(e) => { voice.stop(); setDone((d) => ({ ...d, [s.n]: e.target.checked })); }}
+                      className="mt-1.5 accent-primary"
+                    />
+                    <div className="flex-1">
+                      <p>
+                        <span className="font-mono text-neon-violet mr-2">{String(s.n).padStart(2, "0")}</span>
+                        {s.instruction}
+                      </p>
+                      <p className="text-sm text-muted-foreground mt-1">Tip: {s.tip}</p>
+                    </div>
+                  </label>
                 </li>
               ))}
             </ol>

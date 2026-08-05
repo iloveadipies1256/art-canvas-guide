@@ -17,6 +17,8 @@ import { PracticeStatsPanel } from "@/components/PracticeStats";
 import type { SkillLevel } from "@/lib/coach.skill";
 import { Sparkles, Palette, GraduationCap } from "lucide-react";
 import { toast } from "sonner";
+import { useVoiceGuidance, useAutoSpeakStep } from "@/hooks/useVoiceGuidance";
+import { VoiceGuidanceControls } from "@/components/VoiceGuidanceControls";
 
 export const Route = createFileRoute("/_authenticated/coach")({
   head: () => ({
@@ -47,6 +49,13 @@ function CoachPage() {
   const [subject, setSubject] = useState("");
   const [lesson, setLesson] = useState<(CoachLesson & { level?: SkillLevel }) | null>(null);
   const [feedbackGiven, setFeedbackGiven] = useState(false);
+  const [done, setDone] = useState<Record<number, boolean>>({});
+  const voice = useVoiceGuidance();
+  const activeStep = lesson?.steps.find((s) => !done[s.n]) ?? null;
+  useAutoSpeakStep(
+    voice,
+    activeStep ? `Step ${activeStep.n}. ${activeStep.instruction}. Tip: ${activeStep.tip}` : null,
+  );
 
   const { data: recent } = useQuery({ queryKey: ["lessons"], queryFn: () => list() });
   const { data: skill } = useQuery<UserSkill>({ queryKey: ["user-skill"], queryFn: () => skillFn() });
@@ -56,6 +65,8 @@ function CoachPage() {
     onSuccess: (res) => {
       setLesson(res);
       setFeedbackGiven(false);
+      setDone({});
+      voice.stop();
       qc.invalidateQueries({ queryKey: ["lessons"] });
       qc.invalidateQueries({ queryKey: ["practice-stats"] });
     },
@@ -72,6 +83,8 @@ function CoachPage() {
       .then((res) => {
         setLesson(res);
         setFeedbackGiven(false);
+        setDone({});
+        voice.stop();
         qc.invalidateQueries({ queryKey: ["lessons"] });
         qc.invalidateQueries({ queryKey: ["practice-stats"] });
       })
@@ -207,11 +220,31 @@ function CoachPage() {
                 <Palette className="w-4 h-4" /> Draw it
               </Link>
             </div>
+            <VoiceGuidanceControls voice={voice} className="mb-4" />
             <ol className="space-y-3">
               {lesson.steps.map((s) => (
-                <li key={s.n} className="rounded-lg border border-border p-4">
-                  <p><span className="font-mono text-neon-violet mr-2">{String(s.n).padStart(2, "0")}</span>{s.instruction}</p>
-                  <p className="text-sm text-muted-foreground mt-1">Tip: {s.tip}</p>
+                <li
+                  key={s.n}
+                  className={`rounded-lg border p-4 ${
+                    done[s.n]
+                      ? "border-accent/40 bg-accent/5"
+                      : activeStep?.n === s.n
+                        ? "border-primary/60 bg-primary/5"
+                        : "border-border"
+                  }`}
+                >
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={!!done[s.n]}
+                      onChange={(e) => { voice.stop(); setDone((d) => ({ ...d, [s.n]: e.target.checked })); }}
+                      className="mt-1.5 accent-primary"
+                    />
+                    <div className="flex-1">
+                      <p><span className="font-mono text-neon-violet mr-2">{String(s.n).padStart(2, "0")}</span>{s.instruction}</p>
+                      <p className="text-sm text-muted-foreground mt-1">Tip: {s.tip}</p>
+                    </div>
+                  </label>
                 </li>
               ))}
             </ol>
@@ -267,7 +300,7 @@ function CoachPage() {
               {recent.map((r) => (
                 <button
                   key={r.id}
-                  onClick={() => { setSubject(r.subject); setLesson(r.payload as CoachLesson); }}
+                  onClick={() => { voice.stop(); setSubject(r.subject); setLesson(r.payload as CoachLesson); setDone({}); }}
                   className="text-left glass rounded-xl p-4 hover:glow-violet transition-shadow"
                 >
                   <p className="font-display font-medium">{r.subject}</p>
