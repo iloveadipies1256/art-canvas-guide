@@ -11,6 +11,8 @@ import {
 } from "@/lib/coach.functions";
 import { Sparkles, X, MessageSquareText, Image as ImageIcon, Loader2, Timer, Play, Pause, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
+import { SKILL_AXES } from "@/lib/skill.axes";
+import { weakestFromBreakdown, weakAreaLessonSubject, type CritiqueBreakdown } from "@/lib/weak-area";
 import { useVoiceGuidance, useAutoSpeakStep } from "@/hooks/useVoiceGuidance";
 import { VoiceGuidanceControls } from "@/components/VoiceGuidanceControls";
 
@@ -171,6 +173,7 @@ export function CoachDrawer({
   const [lesson, setLesson] = useState<CoachLesson | null>(null);
   const [done, setDone] = useState<Record<number, boolean>>({});
   const [critique, setCritique] = useState<string | null>(null);
+  const [breakdown, setBreakdown] = useState<CritiqueBreakdown | null>(null);
   const [critiqueRegions, setCritiqueRegions] = useState<CritiqueRegion[]>([]);
   const [microDrill, setMicroDrill] = useState<MicroDrill | null>(null);
   const [critiquedImage, setCritiquedImage] = useState<string | null>(null);
@@ -220,9 +223,29 @@ export function CoachDrawer({
     }),
     onSuccess: (res) => {
       setCritique(res.critique);
+      setBreakdown((res as { breakdown?: CritiqueBreakdown }).breakdown ?? null);
       setCritiqueRegions(res.regions ?? []);
       setMicroDrill(res.microDrill ?? null);
       setCritiquedImage(imageDataUrl);
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Coach unavailable"),
+  });
+
+  const weakest = weakestFromBreakdown(breakdown);
+
+  const improveMut = useMutation({
+    mutationFn: () =>
+      gen({ data: { subject: weakAreaLessonSubject(weakest.key, prompt || subject) } }),
+    onSuccess: (res) => {
+      voice.stop();
+      setLesson(res);
+      setDone({});
+      setStepImages({});
+      setCritique(null);
+      setBreakdown(null);
+      setCritiqueRegions([]);
+      setMicroDrill(null);
+      toast.success(`New lesson: ${res.title}`);
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Coach unavailable"),
   });
@@ -357,6 +380,43 @@ export function CoachDrawer({
               </p>
               <p className="text-sm whitespace-pre-line">{critique}</p>
             </div>
+
+            {breakdown && (
+              <div className="p-3 rounded-lg border border-accent/40 bg-accent/5">
+                <p className="text-xs font-mono uppercase tracking-widest text-neon-cyan mb-2">
+                  Assessment complete
+                </p>
+                <ul className="grid grid-cols-2 gap-x-4 gap-y-1">
+                  {SKILL_AXES.map((a) => (
+                    <li key={a.key} className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">{a.label}</span>
+                      <span className={`font-mono ${weakest.key === a.key ? "text-neon-violet" : ""}`}>
+                        {breakdown[a.key] === null ? "—" : Math.round(breakdown[a.key] as number)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Weakest right now: <span className="text-neon-violet">{weakest.label.toLowerCase()}</span>
+                  {weakest.value !== null ? ` (${Math.round(weakest.value)})` : ""}.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => improveMut.mutate()}
+                  disabled={improveMut.isPending}
+                  className="mt-3 w-full px-3 py-2 rounded-md bg-primary text-primary-foreground text-xs font-mono uppercase tracking-wider glow-violet disabled:opacity-50 inline-flex items-center justify-center gap-2"
+                >
+                  {improveMut.isPending ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-3.5 h-3.5" />
+                  )}
+                  {improveMut.isPending
+                    ? "Building lesson…"
+                    : `Get a lesson to improve your ${weakest.label.toLowerCase()}`}
+                </button>
+              </div>
+            )}
 
             {critiquedImage && critiqueRegions.length > 0 && (
               <div>
