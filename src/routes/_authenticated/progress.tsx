@@ -3,6 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { AppShell } from "@/components/AppShell";
+import { AssessPiece } from "@/components/AssessPiece";
 import { getSkillHistory } from "@/lib/progress.functions";
 import { SKILL_AXES, axisAverages, type SkillSnapshot } from "@/lib/skill.axes";
 import { TrendingUp } from "lucide-react";
@@ -86,11 +87,15 @@ function ProgressPage() {
         </p>
         <h1 className="font-display font-bold text-4xl mb-6">Proof you're getting better</h1>
 
+        <div className="mb-6">
+          <AssessPiece />
+        </div>
+
         {snapshots.length === 0 ? (
           <div className="glass rounded-2xl p-10 text-center">
-            <p className="font-display text-lg mb-1">No data yet</p>
+            <p className="font-display text-lg mb-1">No charts yet</p>
             <p className="text-sm text-muted-foreground">
-              Submit a drawing for critique and the coach will start charting your line control, proportion,
+              Assess your first piece above and the coach will start charting your line control, proportion,
               value and perspective.
             </p>
           </div>
