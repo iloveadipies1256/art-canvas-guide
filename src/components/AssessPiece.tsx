@@ -5,19 +5,9 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Upload, Sparkles, Loader2, Palette, Target } from "lucide-react";
 import { toast } from "sonner";
 import { critiqueArtwork, generateLesson, type CoachLesson } from "@/lib/coach.functions";
-import { SKILL_AXES, axisLabel, type AxisKey } from "@/lib/skill.axes";
+import { SKILL_AXES } from "@/lib/skill.axes";
+import { weakestFromBreakdown, weakAreaLessonSubject } from "@/lib/weak-area";
 import type { SkillLevel } from "@/lib/coach.skill";
-
-const AXIS_LESSON_SUBJECT: Record<AxisKey, string> = {
-  lineControl:
-    "line control drill: long confident strokes, smooth ellipses and straight lines drawn from the shoulder",
-  proportion:
-    "proportion drill: measuring and blocking in a simple still life with correct relative sizes",
-  shading:
-    "value and shading drill: a sphere, cube and cylinder rendered under a single light source",
-  perspective:
-    "perspective drill: a simple room interior drawn in one-point perspective",
-};
 
 /** Downscale + encode a chosen file to a JPEG data URL the model can read. */
 async function fileToDataUrl(file: File, max = 1024): Promise<string> {
@@ -44,21 +34,6 @@ type Breakdown = {
   perspective: number | null;
   skillEstimate: number;
 };
-
-function weakestFromBreakdown(b: Breakdown | null): { key: AxisKey; label: string; value: number | null } {
-  let best: AxisKey = "lineControl";
-  let bestVal = Infinity;
-  if (b) {
-    for (const axis of SKILL_AXES) {
-      const v = b[axis.key];
-      if (typeof v === "number" && v < bestVal) {
-        bestVal = v;
-        best = axis.key;
-      }
-    }
-  }
-  return { key: best, label: axisLabel(best), value: Number.isFinite(bestVal) ? bestVal : null };
-}
 
 export function AssessPiece({ onAssessed }: { onAssessed?: () => void }) {
   const critiqueFn = useServerFn(critiqueArtwork);
@@ -88,7 +63,9 @@ export function AssessPiece({ onAssessed }: { onAssessed?: () => void }) {
 
       setStage("recommending");
       const weakest = weakestFromBreakdown(bd);
-      const rec = await lessonFn({ data: { subject: AXIS_LESSON_SUBJECT[weakest.key] } });
+      const rec = await lessonFn({
+        data: { subject: weakAreaLessonSubject(weakest.key, subject.trim()) },
+      });
       setLesson(rec);
       await qc.invalidateQueries({ queryKey: ["lessons"] });
       return { weakest };

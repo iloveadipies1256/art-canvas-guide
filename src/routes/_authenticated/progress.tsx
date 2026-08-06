@@ -1,12 +1,13 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { AppShell } from "@/components/AppShell";
 import { AssessPiece } from "@/components/AssessPiece";
+import { WeakAreaLesson } from "@/components/WeakAreaLesson";
 import { getSkillHistory } from "@/lib/progress.functions";
-import { SKILL_AXES, axisAverages, type SkillSnapshot } from "@/lib/skill.axes";
-import { TrendingUp } from "lucide-react";
+import { SKILL_AXES, axisAverages, weakestAxis, type SkillSnapshot } from "@/lib/skill.axes";
+import { TrendingUp, Palette, Sparkles } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/progress")({
   head: () => ({
@@ -78,6 +79,7 @@ function ProgressPage() {
   const snapshots = useMemo(() => history ?? [], [history]);
   const now = useMemo(() => axisAverages(snapshots, 5), [snapshots]);
   const then = useMemo(() => axisAverages(snapshots.slice(0, 5), 5), [snapshots]);
+  const weakest = useMemo(() => weakestAxis(snapshots), [snapshots]);
 
   return (
     <AppShell>
@@ -93,14 +95,35 @@ function ProgressPage() {
 
         {snapshots.length === 0 ? (
           <div className="glass rounded-2xl p-10 text-center">
-            <p className="font-display text-lg mb-1">No charts yet</p>
-            <p className="text-sm text-muted-foreground">
+            <p className="font-display text-lg mb-1">No data yet</p>
+            <p className="text-sm text-muted-foreground max-w-md mx-auto">
               Assess your first piece above and the coach will start charting your line control, proportion,
-              value and perspective.
+              value and perspective. No drawing to upload? Start one now and ask the coach for feedback.
             </p>
+            <div className="mt-5 flex flex-wrap gap-2 justify-center">
+              <Link
+                to="/edit/$artworkId"
+                params={{ artworkId: "new" }}
+                className="px-5 py-3 rounded-lg bg-primary text-primary-foreground font-mono text-xs uppercase tracking-wider glow-violet inline-flex items-center gap-2"
+              >
+                <Palette className="w-4 h-4" /> Start drawing in the studio
+              </Link>
+              <Link
+                to="/coach"
+                className="px-5 py-3 rounded-lg border border-accent/40 bg-accent/5 text-neon-cyan font-mono text-xs uppercase tracking-wider inline-flex items-center gap-2"
+              >
+                <Sparkles className="w-4 h-4" /> Get a lesson from the coach
+              </Link>
+            </div>
           </div>
         ) : (
-          <div className="grid md:grid-cols-2 gap-6">
+          <>
+            {weakest.value !== null && (
+              <div className="mb-6">
+                <WeakAreaLesson weakest={weakest} />
+              </div>
+            )}
+            <div className="grid md:grid-cols-2 gap-6">
             <div className="glass rounded-2xl p-6 flex flex-col items-center">
               <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-4 self-start">
                 Skill radar
@@ -148,7 +171,8 @@ function ProgressPage() {
                 ))}
               </div>
             </div>
-          </div>
+            </div>
+          </>
         )}
       </div>
     </AppShell>
