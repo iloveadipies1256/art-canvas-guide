@@ -112,6 +112,9 @@ export interface StudioProps {
   /** Mid-drawing coaching: receives a flattened snapshot of the work in progress. */
   onLiveCheck?: (imageDataUrl: string) => void;
   liveChecking?: boolean;
+  /** Send the finished piece to the progress page for skill assessment. */
+  onAssess?: (imageDataUrl: string) => void;
+  assessing?: boolean;
   onSave?: (payload: {
     imageDataUrl: string;
     thumbDataUrl: string;
@@ -622,6 +625,21 @@ export function Studio(props: StudioProps) {
           >
             <Radar className={`w-3.5 h-3.5 ${props.liveChecking ? "animate-spin" : ""}`} />
             {props.liveChecking ? "Watching…" : "Live check"}
+          </button>
+        )}
+        {props.onAssess && (
+          <button
+            onClick={() => props.onAssess!(flatten().toDataURL("image/png"))}
+            disabled={props.assessing}
+            title="Score this piece and add it to your progress charts"
+            className="hidden sm:flex px-3 py-1.5 rounded-md border border-accent/40 text-neon-cyan text-xs font-mono uppercase tracking-wider hover:bg-accent/10 disabled:opacity-50 items-center gap-1.5"
+          >
+            {props.assessing ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <TrendingUp className="w-3.5 h-3.5" />
+            )}
+            {props.assessing ? "Scoring…" : "Show progress"}
           </button>
         )}
         <IconBtn onClick={exportPng} title="Export PNG"><Download className="w-4 h-4" /></IconBtn>
