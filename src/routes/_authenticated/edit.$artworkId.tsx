@@ -7,6 +7,7 @@ import { Studio } from "@/components/canvas/Studio";
 import { CoachDrawer } from "@/components/CoachDrawer";
 import { getArtwork, saveArtwork } from "@/lib/artwork.functions";
 import { liveNudge } from "@/lib/live.functions";
+import { critiqueArtwork } from "@/lib/coach.functions";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/edit/$artworkId")({
@@ -21,6 +22,7 @@ function EditPage() {
   const fetchArtwork = useServerFn(getArtwork);
   const save = useServerFn(saveArtwork);
   const nudge = useServerFn(liveNudge);
+  const critique = useServerFn(critiqueArtwork);
 
   const { data, isLoading } = useQuery({
     queryKey: ["artwork", artworkId],
@@ -33,6 +35,7 @@ function EditPage() {
   const [coachImage, setCoachImage] = useState<string | null>(null);
   const [ghost, setGhost] = useState<string | null>(null);
   const [liveChecking, setLiveChecking] = useState(false);
+  const [assessing, setAssessing] = useState(false);
 
   if (!isNew && isLoading) {
     return <AppShell><div className="p-10 text-muted-foreground">Loading artwork…</div></AppShell>;
@@ -52,6 +55,21 @@ function EditPage() {
         ghostImageUrl={ghost}
         onGhostClear={() => setGhost(null)}
         liveChecking={liveChecking}
+        assessing={assessing}
+        onAssess={async (img) => {
+          setAssessing(true);
+          try {
+            await critique({ data: { imageDataUrl: img, subject: currentTitle } });
+            await qc.invalidateQueries({ queryKey: ["skill-history"] });
+            await qc.invalidateQueries({ queryKey: ["user-skill"] });
+            toast.success("Scored — opening your progress");
+            router.navigate({ to: "/progress" });
+          } catch (e) {
+            toast.error(e instanceof Error ? e.message : "Assessment failed");
+          } finally {
+            setAssessing(false);
+          }
+        }}
         onLiveCheck={async (img) => {
           setLiveChecking(true);
           try {
