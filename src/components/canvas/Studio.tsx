@@ -30,6 +30,8 @@ import {
   Maximize2,
   Layers as LayersIcon,
   Radar,
+  TrendingUp,
+  Loader2,
 } from "lucide-react";
 import type { BrushKind, Layer, ShapeKind, Tool } from "./types";
 import { applyBrushSettings, drawStrokeSegment } from "./brushes";
