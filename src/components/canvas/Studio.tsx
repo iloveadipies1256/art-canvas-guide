@@ -23,8 +23,7 @@ import {
   Sparkles,
   ChevronUp,
   ChevronDown,
-  PanelLeft,
-  PanelRight,
+  MoreHorizontal,
   ZoomIn,
   ZoomOut,
   Maximize2,
@@ -35,6 +34,7 @@ import {
 } from "lucide-react";
 import type { BrushKind, Layer, ShapeKind, Tool } from "./types";
 import { applyBrushSettings, drawStrokeSegment } from "./brushes";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -126,6 +126,10 @@ export interface StudioProps {
   onRequestCoach?: (imageDataUrl: string) => void;
   saveLabel?: string;
   saving?: boolean;
+  /** Canvas takes over the whole viewport with floating controls. */
+  fullBleed?: boolean;
+  /** Rendered inside the floating top-left island (brand / nav menu). */
+  navSlot?: React.ReactNode;
 }
 
 export function Studio(props: StudioProps) {
@@ -144,8 +148,9 @@ export function Studio(props: StudioProps) {
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [lastPressure, setLastPressure] = useState(0.5);
-  const [leftOpen, setLeftOpen] = useState(false);
-  const [rightOpen, setRightOpen] = useState(false);
+  const [layersOpen, setLayersOpen] = useState(false);
+  const [drawing, setDrawing] = useState(false);
+  const [chromeHidden, setChromeHidden] = useState(false);
   const [pendingDeleteLayerId, setPendingDeleteLayerId] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
   const [draftAvailable, setDraftAvailable] = useState<Draft | null>(null);
@@ -339,6 +344,7 @@ export function Studio(props: StudioProps) {
     if (!activeLayer) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     drawingRef.current.activePointerId = e.pointerId;
+    setDrawing(true);
     beginHistoryCapture(activeLayer);
     const p = toCanvasPoint(e.clientX, e.clientY);
     if (e.pressure) setLastPressure(e.pressure);
@@ -396,6 +402,7 @@ export function Studio(props: StudioProps) {
   function endPointer(e: React.PointerEvent) {
     pointersRef.current.delete(e.pointerId);
     if (pointersRef.current.size < 2) gestureRef.current = null;
+    setDrawing(false);
     if (drawingRef.current.activePointerId === e.pointerId) {
       if (activeLayer) commitHistoryCapture(activeLayer);
       drawingRef.current.from = null;
@@ -415,6 +422,7 @@ export function Studio(props: StudioProps) {
       else if (e.key === "n") setTool({ kind: "brush", brush: "neon" });
       else if (e.key === "[") setSize((s) => Math.max(1, s - 2));
       else if (e.key === "]") setSize((s) => Math.min(120, s + 2));
+      else if (e.key === "Tab") { e.preventDefault(); setChromeHidden((v) => !v); }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -582,163 +590,274 @@ export function Studio(props: StudioProps) {
   const canUndo = historyRef.current.undo.length > 0;
   const canRedo = historyRef.current.redo.length > 0;
 
-  return (
-    <div className="flex flex-col h-[calc(100dvh-3.5rem)] bg-background overflow-hidden">
-      <div className="flex items-center gap-1.5 px-2 sm:px-4 h-12 border-b border-border/60 glass">
-        <button
-          onClick={() => setLeftOpen((v) => !v)}
-          className="md:hidden p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary"
-          aria-label="Toggle tools"
+  const chromeCls = `transition-opacity duration-200 ${
+    chromeHidden ? "opacity-0 pointer-events-none" : drawing ? "opacity-25 hover:opacity-100" : "opacity-100"
+  }`;
+
+  const toolButtons = (
+    <>
+      {BRUSHES.map((b) => (
+        <IconBtn
+          key={b.kind}
+          active={tool.kind === "brush" && tool.brush === b.kind}
+          onClick={() => setTool({ kind: "brush", brush: b.kind })}
+          title={b.label}
         >
-          <PanelLeft className="w-4 h-4" />
-        </button>
+          {b.icon}
+        </IconBtn>
+      ))}
+      <div className="md:h-px md:w-6 h-6 w-px bg-border md:my-1 mx-1" />
+      {SHAPES.map((s) => (
+        <IconBtn
+          key={s.kind}
+          active={tool.kind === "shape" && tool.shape === s.kind}
+          onClick={() => setTool({ kind: "shape", shape: s.kind })}
+          title={s.label}
+        >
+          {s.icon}
+        </IconBtn>
+      ))}
+    </>
+  );
+
+  return (
+    <div
+      className={`overflow-hidden bg-background ${
+        props.fullBleed ? "fixed inset-0 z-20" : "relative h-[70vh] min-h-[420px] rounded-xl"
+      }`}
+    >
+      <div
+        ref={containerRef}
+        className="absolute inset-0 flex items-center justify-center p-3 sm:p-10"
+        style={{ background: "radial-gradient(ellipse at center, oklch(0.20 0.04 285), oklch(0.11 0.02 280))" }}
+      >
+        <div
+          className="relative shadow-2xl glow-violet rounded-lg overflow-hidden touch-none select-none"
+          style={{
+            aspectRatio: `${CANVAS_W}/${CANVAS_H}`,
+            width: "min(100%, 1400px)",
+            maxHeight: "100%",
+            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+            transformOrigin: "center center",
+          }}
+        >
+          <canvas
+            ref={overlayRef}
+            width={CANVAS_W}
+            height={CANVAS_H}
+            className="block w-full h-full touch-none cursor-crosshair"
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={endPointer}
+            onPointerCancel={endPointer}
+          />
+        </div>
+      </div>
+
+      {/* Top-left: brand / nav + title */}
+      <div className={`absolute top-3 left-3 flex items-center gap-2 ${chromeCls}`}>
+        {props.navSlot}
         <input
           value={title}
           onChange={(e) => { setTitle(e.target.value); props.onTitleChange?.(e.target.value); setDirty(true); }}
-          className="bg-transparent text-sm font-display font-medium focus:outline-none border-b border-transparent focus:border-primary px-1 w-28 sm:w-48"
+          className="hidden sm:block glass rounded-full px-3 h-9 text-sm font-display font-medium focus:outline-none border border-transparent focus:border-primary w-40 md:w-52"
           placeholder="Untitled"
+          aria-label="Artwork title"
         />
-        <div className="flex items-center gap-1 ml-1">
-          <IconBtn onClick={undo} disabled={!canUndo} title="Undo (⌘Z)"><Undo2 className="w-4 h-4" /></IconBtn>
-          <IconBtn onClick={redo} disabled={!canRedo} title="Redo (⌘⇧Z)"><Redo2 className="w-4 h-4" /></IconBtn>
+      </div>
+
+      {/* Left tool dock (desktop) */}
+      <div
+        className={`absolute left-3 top-1/2 -translate-y-1/2 hidden md:flex flex-col items-center gap-0.5 glass rounded-2xl p-1.5 border border-border/60 ${chromeCls}`}
+      >
+        {toolButtons}
+      </div>
+
+      {/* Tool dock (mobile) */}
+      <div className={`absolute bottom-20 inset-x-0 md:hidden overflow-x-auto px-3 ${chromeCls}`}>
+        <div className="flex items-center gap-0.5 glass rounded-2xl p-1.5 border border-border/60 w-max mx-auto">
+          {toolButtons}
         </div>
-        <PressureDot pressure={lastPressure} />
-        <div className="flex-1" />
-        <div className="hidden sm:flex items-center gap-1">
-          <IconBtn onClick={() => setZoom((z) => Math.max(0.25, z - 0.25))} title="Zoom out"><ZoomOut className="w-4 h-4" /></IconBtn>
-          <span className="text-[10px] font-mono w-10 text-center text-foreground/80">{Math.round(zoom * 100)}%</span>
-          <IconBtn onClick={() => setZoom((z) => Math.min(6, z + 0.25))} title="Zoom in"><ZoomIn className="w-4 h-4" /></IconBtn>
-          <IconBtn onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }} title="Fit"><Maximize2 className="w-4 h-4" /></IconBtn>
-        </div>
+      </div>
+
+      {/* Top-right: actions */}
+      <div
+        className={`absolute top-3 right-3 flex items-center gap-1 glass rounded-2xl p-1.5 border border-border/60 ${chromeCls}`}
+      >
         {props.onRequestCoach && (
-          <button
+          <IconBtn
             onClick={() => props.onRequestCoach!(flatten().toDataURL("image/png"))}
-            className="hidden sm:flex px-3 py-1.5 rounded-md border border-accent/40 text-neon-cyan text-xs font-mono uppercase tracking-wider hover:bg-accent/10 items-center gap-1.5"
+            title="Ask coach"
           >
-            <Sparkles className="w-3.5 h-3.5" /> Ask coach
-          </button>
+            <Sparkles className="w-4 h-4 text-neon-cyan" />
+          </IconBtn>
         )}
         {props.onLiveCheck && (
-          <button
+          <IconBtn
             onClick={() => props.onLiveCheck!(flatten().toDataURL("image/png"))}
             disabled={props.liveChecking}
-            title="Coach checks your work in progress"
-            className="hidden sm:flex px-3 py-1.5 rounded-md border border-primary/50 text-neon-violet text-xs font-mono uppercase tracking-wider hover:bg-primary/10 disabled:opacity-50 items-center gap-1.5"
+            title="Live check — coach looks at your work in progress"
           >
-            <Radar className={`w-3.5 h-3.5 ${props.liveChecking ? "animate-spin" : ""}`} />
-            {props.liveChecking ? "Watching…" : "Live check"}
-          </button>
+            <Radar className={`w-4 h-4 text-neon-violet ${props.liveChecking ? "animate-spin" : ""}`} />
+          </IconBtn>
         )}
         {props.onAssess && (
-          <button
+          <IconBtn
             onClick={() => props.onAssess!(flatten().toDataURL("image/png"))}
             disabled={props.assessing}
-            title="Score this piece and add it to your progress charts"
-            className="hidden sm:flex px-3 py-1.5 rounded-md border border-accent/40 text-neon-cyan text-xs font-mono uppercase tracking-wider hover:bg-accent/10 disabled:opacity-50 items-center gap-1.5"
+            title="Score this piece and add it to your progress"
           >
             {props.assessing ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
-              <TrendingUp className="w-3.5 h-3.5" />
+              <TrendingUp className="w-4 h-4 text-neon-cyan" />
             )}
-            {props.assessing ? "Scoring…" : "Show progress"}
-          </button>
+          </IconBtn>
         )}
+        <IconBtn onClick={() => setLayersOpen((v) => !v)} active={layersOpen} title="Layers">
+          <LayersIcon className="w-4 h-4" />
+        </IconBtn>
+
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              className="p-2 rounded-md text-foreground/80 hover:text-foreground hover:bg-secondary transition-colors"
+              title="More"
+              aria-label="More options"
+            >
+              <MoreHorizontal className="w-4 h-4" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-64 space-y-4">
+            <div className="sm:hidden">
+              <label className="text-[10px] font-mono uppercase tracking-widest text-foreground/80">Title</label>
+              <input
+                value={title}
+                onChange={(e) => { setTitle(e.target.value); props.onTitleChange?.(e.target.value); setDirty(true); }}
+                className="mt-1.5 w-full rounded-md bg-secondary/60 px-2 py-1.5 text-sm focus:outline-none border border-border focus:border-primary"
+                placeholder="Untitled"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] font-mono uppercase tracking-widest text-foreground/80">Canvas colour</label>
+              <div className="flex items-center gap-2 mt-1.5">
+                <input
+                  type="color"
+                  value={canvasBg}
+                  onChange={(e) => { setCanvasBg(e.target.value); setDirty(true); }}
+                  className="w-10 h-8 rounded-md bg-transparent border border-border cursor-pointer"
+                  aria-label="Canvas background color"
+                />
+                <div className="grid grid-cols-5 gap-1 flex-1">
+                  {["#0B0B12", "#FFFFFF", "#F5F3FF", "#1E1B4B", "#0F172A"].map((c) => (
+                    <button
+                      key={c}
+                      onClick={() => { setCanvasBg(c); setDirty(true); }}
+                      className={`aspect-square rounded-md border ${canvasBg === c ? "border-primary" : "border-border"}`}
+                      style={{ background: c }}
+                      aria-label={`Canvas ${c}`}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {props.ghostImageUrl && (
+              <div className="pt-3 border-t border-border/60">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-mono uppercase tracking-widest text-neon-cyan">Ghost trace</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setGhostVisible((v) => !v)}
+                      className="text-foreground/70 hover:text-foreground"
+                      aria-label="Toggle ghost layer"
+                    >
+                      {ghostVisible ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                    </button>
+                    {props.onGhostClear && (
+                      <button
+                        onClick={props.onGhostClear}
+                        className="text-foreground/70 hover:text-destructive"
+                        aria-label="Remove ghost layer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <label className="text-[10px] font-mono uppercase tracking-widest text-foreground/80 mt-2 block">
+                  Opacity <span className="text-foreground ml-1">{Math.round(ghostOpacity * 100)}%</span>
+                </label>
+                <input
+                  type="range"
+                  min={0}
+                  max={0.8}
+                  step={0.01}
+                  value={ghostOpacity}
+                  onChange={(e) => setGhostOpacity(parseFloat(e.target.value))}
+                  className="w-full accent-accent"
+                  aria-label="Ghost layer opacity"
+                />
+              </div>
+            )}
+
+            <div className="pt-3 border-t border-border/60 flex items-center justify-between">
+              <span className="text-[10px] font-mono uppercase tracking-widest text-foreground/80">Pressure</span>
+              <PressureDot pressure={lastPressure} />
+            </div>
+            <p className="text-[10px] text-muted-foreground">Press Tab to hide every control.</p>
+          </PopoverContent>
+        </Popover>
+
         <IconBtn onClick={exportPng} title="Export PNG"><Download className="w-4 h-4" /></IconBtn>
         {props.onSave && (
           <button
             onClick={save}
             disabled={props.saving}
-            className="px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-xs font-mono uppercase tracking-wider glow-violet disabled:opacity-50 flex items-center gap-1.5"
+            className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-mono uppercase tracking-wider glow-violet disabled:opacity-50 flex items-center gap-1.5"
           >
             <Save className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">{props.saveLabel ?? (props.saving ? "Saving…" : "Save")}</span>
           </button>
         )}
-        <button
-          onClick={() => setRightOpen((v) => !v)}
-          className="md:hidden p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary"
-          aria-label="Toggle panels"
-        >
-          <PanelRight className="w-4 h-4" />
-        </button>
       </div>
 
-      {draftAvailable && (
-        <div className="glass border-b border-border/60 px-4 py-2 flex flex-wrap items-center gap-3">
-          <p className="text-xs">
-            Unsaved draft from {new Date(draftAvailable.updatedAt).toLocaleString()}.
-          </p>
-          <button onClick={() => restoreDraft(draftAvailable)} className="px-2.5 py-1 rounded-md bg-primary text-primary-foreground text-[11px] font-mono uppercase">Restore</button>
-          <button onClick={discardDraft} className="px-2.5 py-1 rounded-md border border-border text-[11px] font-mono uppercase text-foreground/80 hover:text-foreground">Discard</button>
+      {/* Bottom-left: history + zoom */}
+      <div
+        className={`absolute bottom-3 left-3 flex items-center gap-0.5 glass rounded-2xl p-1.5 border border-border/60 ${chromeCls}`}
+      >
+        <IconBtn onClick={undo} disabled={!canUndo} title="Undo (⌘Z)"><Undo2 className="w-4 h-4" /></IconBtn>
+        <IconBtn onClick={redo} disabled={!canRedo} title="Redo (⌘⇧Z)"><Redo2 className="w-4 h-4" /></IconBtn>
+        <div className="hidden sm:flex items-center gap-0.5">
+          <div className="h-6 w-px bg-border mx-1" />
+          <IconBtn onClick={() => setZoom((z) => Math.max(0.25, z - 0.25))} title="Zoom out"><ZoomOut className="w-4 h-4" /></IconBtn>
+          <span className="text-[10px] font-mono w-10 text-center text-foreground/80">{Math.round(zoom * 100)}%</span>
+          <IconBtn onClick={() => setZoom((z) => Math.min(6, z + 0.25))} title="Zoom in"><ZoomIn className="w-4 h-4" /></IconBtn>
+          <IconBtn onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }} title="Fit"><Maximize2 className="w-4 h-4" /></IconBtn>
         </div>
-      )}
+      </div>
 
-      <div className="flex flex-1 overflow-hidden relative">
-        <aside
-          className={`${leftOpen ? "flex" : "hidden"} md:flex absolute md:relative z-30 md:z-auto inset-y-0 left-0 w-14 border-r border-border/60 flex-col items-center py-3 gap-1 glass`}
-        >
-          {BRUSHES.map((b) => (
-            <IconBtn
-              key={b.kind}
-              active={tool.kind === "brush" && tool.brush === b.kind}
-              onClick={() => { setTool({ kind: "brush", brush: b.kind }); setLeftOpen(false); }}
-              title={b.label}
-            >
-              {b.icon}
-            </IconBtn>
-          ))}
-          <div className="h-px w-6 bg-border my-2" />
-          {SHAPES.map((s) => (
-            <IconBtn
-              key={s.kind}
-              active={tool.kind === "shape" && tool.shape === s.kind}
-              onClick={() => { setTool({ kind: "shape", shape: s.kind }); setLeftOpen(false); }}
-              title={s.label}
-            >
-              {s.icon}
-            </IconBtn>
-          ))}
-        </aside>
-
-        <div
-          ref={containerRef}
-          className="flex-1 relative overflow-hidden flex items-center justify-center p-2 sm:p-6"
-          style={{ background: "radial-gradient(ellipse at center, oklch(0.20 0.04 285), oklch(0.11 0.02 280))" }}
-        >
-          <div
-            className="relative shadow-2xl glow-violet rounded-lg overflow-hidden touch-none select-none"
-            style={{
-              aspectRatio: `${CANVAS_W}/${CANVAS_H}`,
-              width: "min(100%, 1200px)",
-              transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-              transformOrigin: "center center",
-            }}
-          >
-            <canvas
-              ref={overlayRef}
-              width={CANVAS_W}
-              height={CANVAS_H}
-              className="block w-full h-full touch-none cursor-crosshair"
-              onPointerDown={onPointerDown}
-              onPointerMove={onPointerMove}
-              onPointerUp={endPointer}
-              onPointerCancel={endPointer}
+      {/* Bottom-center: brush essentials */}
+      <div
+        className={`absolute bottom-3 right-3 sm:right-auto sm:left-1/2 sm:-translate-x-1/2 flex items-center gap-3 glass rounded-2xl px-3 py-2 border border-border/60 ${chromeCls}`}
+      >
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              className="w-7 h-7 rounded-full border border-border shrink-0"
+              style={{ background: color }}
+              aria-label="Brush colour"
+              title="Brush colour"
             />
-          </div>
-        </div>
-
-        <aside
-          className={`${rightOpen ? "flex" : "hidden"} md:flex absolute md:relative z-30 md:z-auto inset-y-0 right-0 w-72 md:w-64 border-l border-border/60 flex-col glass overflow-hidden`}
-        >
-          <div className="p-3 border-b border-border/60">
-            <label className="text-[10px] font-mono uppercase tracking-widest text-foreground/80">Color</label>
-            <div className="flex items-center gap-2 mt-1.5">
+          </PopoverTrigger>
+          <PopoverContent align="center" side="top" className="w-56">
+            <div className="flex items-center gap-2">
               <input
                 type="color"
                 value={color}
                 onChange={(e) => setColor(e.target.value)}
                 className="w-10 h-10 rounded-md bg-transparent border border-border cursor-pointer"
+                aria-label="Pick brush colour"
               />
               <div className="grid grid-cols-5 gap-1 flex-1">
                 {SWATCHES.map((c) => (
@@ -752,86 +871,23 @@ export function Studio(props: StudioProps) {
                 ))}
               </div>
             </div>
-            <label className="text-[10px] font-mono uppercase tracking-widest text-foreground/80 mt-3 block">
-              Size <span className="text-foreground ml-1">{size}px</span>
-            </label>
-            <input
-              type="range"
-              min={1}
-              max={120}
-              value={size}
-              onChange={(e) => setSize(parseInt(e.target.value))}
-              className="w-full accent-primary"
-            />
-            <label className="text-[10px] font-mono uppercase tracking-widest text-foreground/80 mt-3 block">
-              Canvas
-            </label>
-            <div className="flex items-center gap-2 mt-1.5">
-              <input
-                type="color"
-                value={canvasBg}
-                onChange={(e) => { setCanvasBg(e.target.value); setDirty(true); }}
-                className="w-10 h-8 rounded-md bg-transparent border border-border cursor-pointer"
-                aria-label="Canvas background color"
-              />
-              <div className="grid grid-cols-5 gap-1 flex-1">
-                {["#0B0B12", "#FFFFFF", "#F5F3FF", "#1E1B4B", "#0F172A"].map((c) => (
-                  <button
-                    key={c}
-                    onClick={() => { setCanvasBg(c); setDirty(true); }}
-                    className={`aspect-square rounded-md border ${canvasBg === c ? "border-primary" : "border-border"}`}
-                    style={{ background: c }}
-                    aria-label={`Canvas ${c}`}
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
+          </PopoverContent>
+        </Popover>
+        <input
+          type="range"
+          min={1}
+          max={120}
+          value={size}
+          onChange={(e) => setSize(parseInt(e.target.value))}
+          className="w-24 sm:w-44 accent-primary"
+          aria-label="Brush size"
+        />
+        <span className="text-[10px] font-mono w-10 text-foreground/80">{size}px</span>
+      </div>
 
-          {props.ghostImageUrl && (
-            <div className="p-3 border-b border-border/60">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-mono uppercase tracking-widest text-neon-cyan flex items-center gap-1.5">
-                  <LayersIcon className="w-3 h-3" /> Ghost trace
-                </span>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => { setGhostVisible((v) => !v); }}
-                    className="text-foreground/70 hover:text-foreground"
-                    aria-label="Toggle ghost layer"
-                  >
-                    {ghostVisible ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-                  </button>
-                  {props.onGhostClear && (
-                    <button
-                      onClick={props.onGhostClear}
-                      className="text-foreground/70 hover:text-destructive"
-                      aria-label="Remove ghost layer"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-              </div>
-              <label className="text-[10px] font-mono uppercase tracking-widest text-foreground/80 mt-2 block">
-                Opacity <span className="text-foreground ml-1">{Math.round(ghostOpacity * 100)}%</span>
-              </label>
-              <input
-                type="range"
-                min={0}
-                max={0.8}
-                step={0.01}
-                value={ghostOpacity}
-                onChange={(e) => setGhostOpacity(parseFloat(e.target.value))}
-                className="w-full accent-accent"
-                aria-label="Ghost layer opacity"
-              />
-              <p className="text-[10px] text-muted-foreground">
-                Trace over it, then fade it out as the shapes start landing on their own.
-              </p>
-            </div>
-          )}
-
+      {/* Layers panel */}
+      {layersOpen && (
+        <aside className="absolute top-16 right-3 bottom-3 w-60 z-40 glass rounded-2xl border border-border/60 flex flex-col overflow-hidden">
           <div className="p-3 flex items-center justify-between border-b border-border/60">
             <span className="text-[10px] font-mono uppercase tracking-widest text-foreground/80">Layers</span>
             <button onClick={addLayer} className="text-neon-violet hover:opacity-80" aria-label="Add layer">
@@ -852,15 +908,12 @@ export function Studio(props: StudioProps) {
                   >
                     {l.visible ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
                   </button>
-                  <button
-                    onClick={() => setActiveId(l.id)}
-                    className="flex-1 text-left text-xs truncate font-medium"
-                  >
+                  <button onClick={() => setActiveId(l.id)} className="flex-1 text-left text-xs truncate font-medium">
                     {l.name}
                   </button>
-                  <button onClick={() => moveLayer(l.id, 1)} className="md:opacity-0 md:group-hover:opacity-100 text-foreground/70 hover:text-foreground" aria-label="Move up"><ChevronUp className="w-3 h-3" /></button>
-                  <button onClick={() => moveLayer(l.id, -1)} className="md:opacity-0 md:group-hover:opacity-100 text-foreground/70 hover:text-foreground" aria-label="Move down"><ChevronDown className="w-3 h-3" /></button>
-                  <button onClick={() => requestRemoveLayer(l.id)} className="md:opacity-0 md:group-hover:opacity-100 text-foreground/70 hover:text-destructive" aria-label="Delete"><Trash2 className="w-3 h-3" /></button>
+                  <button onClick={() => moveLayer(l.id, 1)} className="text-foreground/70 hover:text-foreground" aria-label="Move up"><ChevronUp className="w-3 h-3" /></button>
+                  <button onClick={() => moveLayer(l.id, -1)} className="text-foreground/70 hover:text-foreground" aria-label="Move down"><ChevronDown className="w-3 h-3" /></button>
+                  <button onClick={() => requestRemoveLayer(l.id)} className="text-foreground/70 hover:text-destructive" aria-label="Delete"><Trash2 className="w-3 h-3" /></button>
                 </div>
                 <input
                   type="range"
@@ -879,8 +932,15 @@ export function Studio(props: StudioProps) {
             ))}
           </div>
         </aside>
-      </div>
+      )}
 
+      {draftAvailable && (
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-40 glass rounded-xl border border-border/60 px-3 py-2 flex flex-wrap items-center gap-3">
+          <p className="text-xs">Unsaved draft from {new Date(draftAvailable.updatedAt).toLocaleString()}.</p>
+          <button onClick={() => restoreDraft(draftAvailable)} className="px-2.5 py-1 rounded-md bg-primary text-primary-foreground text-[11px] font-mono uppercase">Restore</button>
+          <button onClick={discardDraft} className="px-2.5 py-1 rounded-md border border-border text-[11px] font-mono uppercase text-foreground/80 hover:text-foreground">Discard</button>
+        </div>
+      )}
       <AlertDialog open={!!pendingDeleteLayerId} onOpenChange={(o) => !o && setPendingDeleteLayerId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>

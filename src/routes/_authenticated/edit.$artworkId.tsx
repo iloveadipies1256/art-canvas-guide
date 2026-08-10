@@ -2,8 +2,8 @@ import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { AppShell } from "@/components/AppShell";
 import { Studio } from "@/components/canvas/Studio";
+import { StudioNav } from "@/components/StudioNav";
 import { CoachDrawer } from "@/components/CoachDrawer";
 import { getArtwork, saveArtwork } from "@/lib/artwork.functions";
 import { liveNudge } from "@/lib/live.functions";
@@ -38,14 +38,16 @@ function EditPage() {
   const [assessing, setAssessing] = useState(false);
 
   if (!isNew && isLoading) {
-    return <AppShell><div className="p-10 text-muted-foreground">Loading artwork…</div></AppShell>;
+    return <div className="p-10 text-muted-foreground">Loading artwork…</div>;
   }
 
   const currentTitle = title || data?.title || "Untitled";
 
   return (
-    <AppShell>
+    <>
       <Studio
+        fullBleed
+        navSlot={<StudioNav />}
         title={currentTitle}
         onTitleChange={setTitle}
         initialImageUrl={data?.imageUrl}
@@ -112,6 +114,6 @@ function EditPage() {
         onTrace={(url) => { setGhost(url); toast.success("Reference mounted as a ghost layer"); }}
         onClose={() => setCoachImage(null)}
       />
-    </AppShell>
+    </>
   );
 }
