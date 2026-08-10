@@ -14,16 +14,26 @@ export const Route = createFileRoute("/studio")({
 
 function PublicStudio() {
   return (
-    <div className="min-h-screen">
-      <header className="glass border-b border-border/60 h-14 flex items-center justify-between px-4">
-        <Link to="/" className="font-display font-bold flex items-center gap-2">
-          <span className="text-neon-violet">◆</span> Neon<span className="text-neon-cyan">Canvas</span>
-        </Link>
-        <Link to="/auth" className="px-3 py-1.5 rounded-md bg-primary text-primary-foreground font-mono text-xs uppercase tracking-wider glow-violet">
-          Sign in to save
-        </Link>
-      </header>
-      <Studio title="Untitled sketch" />
-    </div>
+    <Studio
+      fullBleed
+      title="Untitled sketch"
+      navSlot={
+        <div className="flex items-center gap-2">
+          <Link
+            to="/"
+            className="glass rounded-full w-9 h-9 grid place-items-center text-neon-violet text-lg border border-border/60 hover:border-primary transition-colors"
+            aria-label="Home"
+          >
+            ◆
+          </Link>
+          <Link
+            to="/auth"
+            className="px-3 h-9 inline-flex items-center rounded-full bg-primary text-primary-foreground font-mono text-[10px] uppercase tracking-wider glow-violet"
+          >
+            Sign in to save
+          </Link>
+        </div>
+      }
+    />
   );
 }
