@@ -413,6 +413,12 @@ export function Studio(props: StudioProps) {
   }
 
   useEffect(() => {
+    function isInteractiveTarget(target: EventTarget | null): boolean {
+      if (!(target instanceof HTMLElement)) return false;
+      return target.matches(
+        'input, textarea, button, select, a[href], [role="button"], [tabindex]:not([tabindex="-1"])',
+      );
+    }
     function onKey(e: KeyboardEvent) {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if ((e.metaKey || e.ctrlKey) && e.key === "z" && !e.shiftKey) { e.preventDefault(); undo(); }
@@ -422,7 +428,7 @@ export function Studio(props: StudioProps) {
       else if (e.key === "n") setTool({ kind: "brush", brush: "neon" });
       else if (e.key === "[") setSize((s) => Math.max(1, s - 2));
       else if (e.key === "]") setSize((s) => Math.min(120, s + 2));
-      else if (e.key === "Tab") { e.preventDefault(); setChromeHidden((v) => !v); }
+      else if (e.key === "`" && !isInteractiveTarget(e.target)) { e.preventDefault(); setChromeHidden((v) => !v); }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
