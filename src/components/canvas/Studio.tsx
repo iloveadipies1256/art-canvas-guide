@@ -811,7 +811,7 @@ export function Studio(props: StudioProps) {
               <span className="text-[10px] font-mono uppercase tracking-widest text-foreground/80">Pressure</span>
               <PressureDot pressure={lastPressure} />
             </div>
-            <p className="text-[10px] text-muted-foreground">Press Tab to hide every control.</p>
+            <p className="text-[10px] text-muted-foreground">Press ` to hide every control.</p>
           </PopoverContent>
         </Popover>
 
