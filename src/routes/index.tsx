@@ -3,8 +3,23 @@ import { Link } from "@tanstack/react-router";
 import { Palette, Sparkles, Layers, Wand2 } from "lucide-react";
 import { InstallAppButton } from "@/components/InstallAppButton";
 
+const TITLE = "Neon Canvas — install the AI drawing studio";
+const DESCRIPTION =
+  "Draw on a neon-dark canvas with seven brushes, real layers, and an AI coach that turns any subject into a step-by-step lesson. Installable on phone and desktop.";
+
 export const Route = createFileRoute("/")({
   component: Landing,
+  head: () => ({
+    meta: [
+      { title: TITLE },
+      { name: "description", content: DESCRIPTION },
+      { property: "og:title", content: TITLE },
+      { property: "og:description", content: DESCRIPTION },
+      { property: "og:type", content: "website" },
+      { property: "og:url", content: "https://art-canvas-guide.lovable.app/" },
+    ],
+    links: [{ rel: "canonical", href: "https://art-canvas-guide.lovable.app/" }],
+  }),
 });
 
 function Landing() {
