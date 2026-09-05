@@ -1,0 +1,17 @@
+{
+  "name": "Neon Canvas — draw with an AI coach",
+  "short_name": "Neon Canvas",
+  "description": "A neon-dark drawing studio with layered brushes, shapes, and an AI coach that walks you through every stroke.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0B0B12",
+  "theme_color": "#0B0B12",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
