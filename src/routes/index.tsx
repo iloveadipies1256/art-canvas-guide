@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Link } from "@tanstack/react-router";
 import { Palette, Sparkles, Layers, Wand2 } from "lucide-react";
+import { InstallAppButton } from "@/components/InstallAppButton";
 
 export const Route = createFileRoute("/")({
   component: Landing,
@@ -39,6 +40,7 @@ function Landing() {
           <Link to="/auth" className="px-6 py-3 rounded-lg border border-border font-mono text-xs uppercase tracking-wider hover:bg-secondary">
             Save your work →
           </Link>
+          <InstallAppButton className="px-6 py-3" />
         </div>
       </section>
 
